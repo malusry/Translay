@@ -24,7 +24,7 @@ Translay 是一款面向 Windows 的开源划词翻译工具。应用启动后�
 ## 安装与运行
 
 普通用户可以从
-[GitHub Releases](https://github.com/malusry/Translay/releases/latest)
+[GitHub Releases](https://github.com/malusry/Translay/releases)
 下载 Windows `setup.exe` 安装程序。当前 Beta 安装包尚未进行商业代码签名，
 Windows 可能显示来源未知提示；请只从本仓库下载。
 
