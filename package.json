@@ -22,7 +22,8 @@
     "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && cargo check --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml",
     "check": "npm run check:frontend && npm run check:rust",
     "app:dev": "tauri dev",
-    "app:build": "tauri build --no-bundle",
+    "app:build": "tauri build --bundles nsis",
+    "app:build:exe": "tauri build --no-bundle",
     "tauri": "tauri"
   },
   "dependencies": {
