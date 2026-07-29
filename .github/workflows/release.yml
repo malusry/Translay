@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: translay-v0.3.0-beta-release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run checks
+        run: npm run check
+
+      - name: Build draft release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v0.3.0-beta.1
+          releaseName: "Translay v0.3.0 Beta 1"
+          releaseBody: |
+            Translay 的首个公开 Windows Beta 版本。
+
+            主要功能：
+            - 通过 Ctrl+Shift+T 翻译其他应用中选中的文字
+            - 支持本地 OpenAI-compatible 服务与远程 API
+            - 支持口语、学术风格和模型思考开关
+            - API Key 仅保存在 Windows 凭据管理器
+
+            下载 `setup.exe` 完成当前用户安装。此 Beta 尚未进行商业代码签名，
+            Windows 可能显示来源未知提示，请只从本仓库下载。
+          releaseDraft: true
+          prerelease: true
+          args: "--bundles nsis"

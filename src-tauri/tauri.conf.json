@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Translay",
   "version": "0.3.0",
-  "identifier": "com.translay.techspike",
+  "identifier": "com.malusry.translay",
   "build": {
     "beforeDevCommand": "npm.cmd run dev",
     "devUrl": "http://127.0.0.1:1420",
@@ -20,7 +20,33 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": "all"
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "publisher": "Translay contributors",
+    "homepage": "https://github.com/malusry/Translay",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "copyright": "Copyright © 2026 Translay contributors",
+    "licenseFile": "../LICENSE",
+    "category": "Utility",
+    "shortDescription": "Windows 全局划词翻译工具",
+    "longDescription": "使用本地或 OpenAI-compatible 模型，在 Windows 中通过全局快捷键翻译选中文字。",
+    "windows": {
+      "allowDowngrades": false,
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "SimpChinese"
+        ]
+      }
+    }
   }
 }

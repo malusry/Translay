@@ -23,21 +23,27 @@ Translay 是一款面向 Windows 的开源划词翻译工具。应用启动后�
 
 ## 安装与运行
 
-在项目根目录执行：
+普通用户可以从
+[GitHub Releases](https://github.com/malusry/Translay/releases/latest)
+下载 Windows `setup.exe` 安装程序。当前 Beta 安装包尚未进行商业代码签名，
+Windows 可能显示来源未知提示；请只从本仓库下载。
+
+从源码运行时，在项目根目录执行：
 
 ```powershell
 npm.cmd install
 npm.cmd run app:dev
 ```
 
-生成并运行正式版本：
+生成 NSIS 安装包和正式可执行文件：
 
 ```powershell
 npm.cmd run app:build
 .\src-tauri\target\release\translay.exe
 ```
 
-当前仓库提供源码构建，尚未提供经过代码签名的 Windows 安装包。
+安装包生成在 `src-tauri\target\release\bundle\nsis\`。如果只需要未打包的
+可执行文件，可以运行 `npm.cmd run app:build:exe`。
 
 项目只使用 `src-tauri\target` 作为 Rust 构建目录，并以
 `src-tauri\target\release\translay.exe` 作为唯一成品入口。不要直接保留或运行
@@ -121,6 +127,9 @@ npm.cmd run app:build
 Rust 格式、编译和测试检查。
 
 若本地无法访问 crates.io，可仅为当前命令指定可信镜像，不必把镜像写进项目配置。
+
+正式发布由 [`.github/workflows/release.yml`](.github/workflows/release.yml)
+在 Windows runner 上生成 NSIS 安装包，并先创建为 GitHub 草稿 Release。
 
 ## 代码结构
 
