@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1080">
+  <defs>
+    <linearGradient id="boardBg" x1="0" y1="0" x2="1600" y2="1080" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8F7F4"/>
+      <stop offset="1" stop-color="#EEEFF2"/>
+    </linearGradient>
+    <linearGradient id="sourcePanelB" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#ECEEF3"/>
+    </linearGradient>
+    <linearGradient id="resultPanelB" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFFEFB"/>
+      <stop offset="1" stop-color="#F1F1EE"/>
+    </linearGradient>
+    <linearGradient id="bridgeB" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#6E78A6"/>
+      <stop offset="1" stop-color="#8B94B8"/>
+    </linearGradient>
+    <filter id="boardCardShadow" x="-20%" y="-20%" width="140%" height="155%">
+      <feDropShadow dx="0" dy="14" stdDeviation="28" flood-color="#505766" flood-opacity=".12"/>
+    </filter>
+    <filter id="iconShadowB" x="-35%" y="-40%" width="175%" height="195%">
+      <feDropShadow dx="0" dy="15" stdDeviation="16" flood-color="#495064" flood-opacity=".19"/>
+    </filter>
+    <filter id="paneShadowB" x="-25%" y="-30%" width="150%" height="175%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#555D70" flood-opacity=".14"/>
+    </filter>
+
+    <!-- Reusable open-form desktop glyph. -->
+    <g id="desktopGlyph">
+      <g filter="url(#iconShadowB)">
+        <rect x="20" y="18" width="216" height="100" rx="18" fill="url(#sourcePanelB)" stroke="#C5CAD7" stroke-width="5"/>
+      </g>
+      <rect x="44" y="42" width="168" height="32" rx="8" fill="#E0E4F1"/>
+      <rect x="57" y="52" width="121" height="12" rx="6" fill="#6974A3"/>
+      <rect x="187" y="52" width="12" height="12" rx="6" fill="#A2A9C2"/>
+      <rect x="38" y="46" width="4.5" height="24" rx="2.25" fill="#8F98B7"/>
+      <rect x="214" y="46" width="4.5" height="24" rx="2.25" fill="#8F98B7"/>
+      <rect x="44" y="88" width="77" height="10" rx="5" fill="#B1B5C3"/>
+      <path d="M118 72h35v84c0 10-8 18-18 18s-17-8-17-18V72z" fill="url(#bridgeB)"/>
+      <path d="M135 119l35 29-35 28-17-15v-26z" fill="#8FC7B4"/>
+      <path d="M135 119v57l-17-15v-26z" fill="#70AF9A"/>
+      <g filter="url(#paneShadowB)">
+        <rect x="62" y="148" width="196" height="90" rx="15" fill="url(#resultPanelB)" stroke="#B9C0CF" stroke-width="5"/>
+      </g>
+      <rect x="88" y="171" width="115" height="13" rx="6.5" fill="#6873A2"/>
+      <rect x="88" y="197" width="81" height="11" rx="5.5" fill="#8FC7B4"/>
+      <circle cx="229" cy="178" r="5" fill="#A8AEC0"/>
+    </g>
+  </defs>
+
+  <rect width="1600" height="1080" fill="url(#boardBg)"/>
+  <circle cx="1515" cy="-5" r="285" fill="#E4E7F0" opacity=".64"/>
+  <circle cx="40" cy="1090" r="250" fill="#DFECE8" opacity=".52"/>
+
+  <text x="80" y="91" fill="#2A2E35" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="41" font-weight="700">Translay 桌面工具图标 · 第三轮</text>
+  <text x="80" y="134" fill="#777D87" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="19">移除手机 App 式底板，用“选区 + 转换桥 + 译文浮窗”构成开放式 T</text>
+
+  <!-- Main proposal -->
+  <g filter="url(#boardCardShadow)">
+    <rect x="80" y="180" width="690" height="610" rx="34" fill="#FCFCFA"/>
+  </g>
+  <rect x="116" y="214" width="118" height="35" rx="17.5" fill="#EDEEF5"/>
+  <text x="175" y="238" text-anchor="middle" fill="#6974A3" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" letter-spacing="1">主图标方案</text>
+  <g transform="translate(225 287) scale(1.55)">
+    <use href="#desktopGlyph"/>
+  </g>
+  <text x="116" y="691" fill="#2A2E35" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="28" font-weight="700">开放式「浮译工具 T」</text>
+  <text x="116" y="731" fill="#666C76" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18">透明画布，没有圆角方形底；T 由真实操作流程自然出现</text>
+  <text x="116" y="762" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16">低饱和雾紫负责工具属性，鼠尾草绿只标记“内容发生了转换”</text>
+
+  <!-- Anatomy -->
+  <g filter="url(#boardCardShadow)">
+    <rect x="818" y="180" width="702" height="610" rx="34" fill="#FCFCFA"/>
+  </g>
+  <text x="856" y="232" fill="#2A2E35" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="23" font-weight="700">不是字母装饰，而是一条产品流程</text>
+
+  <g transform="translate(864 285)">
+    <circle cx="46" cy="46" r="46" fill="#E8EAF3"/>
+    <rect x="17" y="31" width="58" height="18" rx="6" fill="#FFFFFF"/>
+    <rect x="25" y="37" width="37" height="6" rx="3" fill="#6974A3"/>
+    <rect x="13" y="29" width="3" height="22" rx="1.5" fill="#8F98B7"/>
+    <rect x="76" y="29" width="3" height="22" rx="1.5" fill="#8F98B7"/>
+    <text x="116" y="38" fill="#333840" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="20" font-weight="700">选中文字</text>
+    <text x="116" y="68" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16">选区高亮形成 T 的横向结构</text>
+
+    <path d="M46 105v38" stroke="#BCC1CD" stroke-width="3" stroke-linecap="round"/>
+    <path d="M39 135l7 8 7-8" fill="none" stroke="#BCC1CD" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <circle cx="46" cy="190" r="46" fill="#E8EAF3"/>
+    <rect x="39" y="161" width="14" height="56" rx="7" fill="#7782AE"/>
+    <path d="M46 180l20 17-20 17-7-6v-21z" fill="#8FC7B4"/>
+    <text x="116" y="181" fill="#333840" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="20" font-weight="700">语言转换</text>
+    <text x="116" y="211" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16">折带既是过程，也是 T 的纵向结构</text>
+
+    <path d="M46 249v38" stroke="#BCC1CD" stroke-width="3" stroke-linecap="round"/>
+    <path d="M39 279l7 8 7-8" fill="none" stroke="#BCC1CD" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <circle cx="46" cy="334" r="46" fill="#E8EAF3"/>
+    <rect x="14" y="312" width="67" height="43" rx="10" fill="#FFFFFF" stroke="#B9C0CF" stroke-width="2"/>
+    <rect x="24" y="324" width="38" height="5" rx="2.5" fill="#6873A2"/>
+    <rect x="24" y="337" width="27" height="4" rx="2" fill="#8FC7B4"/>
+    <text x="116" y="325" fill="#333840" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="20" font-weight="700">译文浮窗</text>
+    <text x="116" y="355" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16">桌面窗口轮廓强化专业工具感</text>
+  </g>
+
+  <g transform="translate(1266 315)">
+    <rect width="178" height="286" rx="24" fill="#F1F1EE"/>
+    <text x="89" y="37" text-anchor="middle" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15">结构关系</text>
+    <path d="M37 74h104" stroke="#6974A3" stroke-width="20" stroke-linecap="round"/>
+    <path d="M89 74v124" stroke="#7E88B2" stroke-width="20" stroke-linecap="round"/>
+    <path d="M89 133l34 28-34 28" fill="#8FC7B4"/>
+    <rect x="29" y="191" width="136" height="63" rx="18" fill="#FFFFFF" stroke="#B9C0CF" stroke-width="3"/>
+    <text x="89" y="276" text-anchor="middle" fill="#6873A2" font-family="Segoe UI, sans-serif" font-size="15" font-weight="700">T is the workflow</text>
+  </g>
+
+  <!-- Desktop contexts -->
+  <g filter="url(#boardCardShadow)">
+    <rect x="80" y="834" width="1440" height="182" rx="34" fill="#FCFCFA"/>
+  </g>
+  <text x="116" y="878" fill="#2A2E35" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="22" font-weight="700">Windows 使用场景与图标体系</text>
+
+  <!-- Desktop shortcut -->
+  <g transform="translate(120 904)">
+    <rect width="290" height="86" rx="15" fill="#F3F2EF"/>
+    <g transform="translate(10 5) scale(.29)">
+      <use href="#desktopGlyph"/>
+    </g>
+    <text x="104" y="38" fill="#343840" font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">Translay</text>
+    <text x="104" y="64" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">桌面快捷方式 · 透明外缘</text>
+  </g>
+
+  <!-- Taskbar -->
+  <g transform="translate(456 904)">
+    <rect width="330" height="86" rx="15" fill="#E9EAED"/>
+    <rect x="18" y="16" width="54" height="54" rx="11" fill="#F8F8F6" stroke="#C4C9D4" stroke-width="2"/>
+    <rect x="25" y="23" width="33" height="15" rx="5" fill="#E0E4F1"/>
+    <rect x="30" y="28" width="20" height="4" rx="2" fill="#6974A3"/>
+    <rect x="39" y="37" width="6" height="13" fill="#7D87B1"/>
+    <path d="M42 40l7 6-7 6-3-3v-6z" fill="#8FC7B4"/>
+    <rect x="29" y="48" width="35" height="17" rx="5" fill="#FFFFFF" stroke="#B9C0CF"/>
+    <text x="92" y="38" fill="#343840" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="600">任务栏 32 px</text>
+    <text x="92" y="64" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">保留面板层次，取消大色块</text>
+  </g>
+
+  <!-- Light tray -->
+  <g transform="translate(832 904)">
+    <rect width="258" height="86" rx="15" fill="#ECEDEF"/>
+    <path d="M30 52h13l6-8 6 8h14" fill="none" stroke="#777D88" stroke-width="3" stroke-linecap="round"/>
+    <g transform="translate(87 31)" fill="none" stroke="#626978" stroke-width="2.4" stroke-linejoin="round">
+      <path d="M1 1h20v8H13v13"/>
+      <path d="M8 13h17v9H8z"/>
+    </g>
+    <text x="132" y="40" fill="#343840" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="600">浅色托盘</text>
+    <text x="132" y="63" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13">单色线性符号</text>
+  </g>
+
+  <!-- Dark tray -->
+  <g transform="translate(1136 904)">
+    <rect width="342" height="86" rx="15" fill="#2D3036"/>
+    <path d="M27 52h13l6-8 6 8h14" fill="none" stroke="#B9BEC8" stroke-width="3" stroke-linecap="round"/>
+    <g transform="translate(85 31)" fill="none" stroke="#E1E4EA" stroke-width="2.4" stroke-linejoin="round">
+      <path d="M1 1h20v8H13v13"/>
+      <path d="M8 13h17v9H8z"/>
+    </g>
+    <text x="130" y="40" fill="#E7E9ED" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="600">深色托盘</text>
+    <text x="130" y="63" fill="#A8ADB6" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13">自动反白，保持系统感</text>
+  </g>
+</svg>

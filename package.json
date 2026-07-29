@@ -1,0 +1,42 @@
+{
+  "name": "translay",
+  "private": true,
+  "version": "0.3.0",
+  "description": "A lightweight Windows selection translation tool powered by local or OpenAI-compatible models.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/malusry/Translay.git"
+  },
+  "homepage": "https://github.com/malusry/Translay#readme",
+  "bugs": {
+    "url": "https://github.com/malusry/Translay/issues"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check:frontend": "npm run typecheck && npm run test && npm run build",
+    "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && cargo check --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml",
+    "check": "npm run check:frontend && npm run check:rust",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build --no-bundle",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^7.0.0",
+    "vitest": "^4.1.10"
+  }
+}

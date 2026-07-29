@@ -1,0 +1,12 @@
+node_modules/
+dist/
+release/
+src-tauri/target/
+src-tauri/target-*/
+.cargo-target-*/
+.translay-webviews/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store

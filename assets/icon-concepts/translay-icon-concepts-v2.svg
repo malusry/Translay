@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1080">
+  <defs>
+    <linearGradient id="pageBg2" x1="0" y1="0" x2="1600" y2="1080" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F9F8F5"/>
+      <stop offset="1" stop-color="#F0F1F5"/>
+    </linearGradient>
+    <linearGradient id="lightLavender" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#F7F6F9"/>
+      <stop offset="1" stop-color="#DDE2F2"/>
+    </linearGradient>
+    <linearGradient id="warmIvory" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FBFAF7"/>
+      <stop offset="1" stop-color="#E8E8E5"/>
+    </linearGradient>
+    <linearGradient id="mistSage" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#F5F7F5"/>
+      <stop offset="1" stop-color="#DCE9E5"/>
+    </linearGradient>
+    <linearGradient id="bridge2" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#727DAD"/>
+      <stop offset="1" stop-color="#909AC0"/>
+    </linearGradient>
+    <filter id="cardShadow2" x="-20%" y="-20%" width="140%" height="155%">
+      <feDropShadow dx="0" dy="12" stdDeviation="25" flood-color="#515868" flood-opacity=".11"/>
+    </filter>
+    <filter id="panelShadow2" x="-25%" y="-30%" width="150%" height="170%">
+      <feDropShadow dx="0" dy="9" stdDeviation="13" flood-color="#626982" flood-opacity=".16"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="1080" fill="url(#pageBg2)"/>
+  <circle cx="1490" cy="20" r="270" fill="#E8EAF4" opacity=".62"/>
+  <circle cx="40" cy="1080" r="250" fill="#E2EFEB" opacity=".5"/>
+
+  <text x="80" y="88" fill="#2C3038" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="40" font-weight="700">Translay 图标探索 · 第二轮</text>
+  <text x="80" y="132" fill="#777D88" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="19">让“选区 → 转换 → 浮层译文”的产品动作自然组成 T，而不是把字母 T 直接放进图标</text>
+  <g transform="translate(1257 79)">
+    <circle cx="0" cy="0" r="11" fill="#ECECF2" stroke="#D9DCE8"/>
+    <circle cx="38" cy="0" r="11" fill="#6873A2"/>
+    <circle cx="76" cy="0" r="11" fill="#91CBB8"/>
+    <text x="102" y="6" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15">浅雾紫 · 暖白 · 鼠尾草绿</text>
+  </g>
+
+  <!-- Concept A -->
+  <g filter="url(#cardShadow2)">
+    <rect x="80" y="178" width="448" height="608" rx="34" fill="#FCFCFA"/>
+  </g>
+  <rect x="112" y="210" width="100" height="34" rx="17" fill="#ECEEF8"/>
+  <text x="162" y="233" text-anchor="middle" fill="#6571A2" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" letter-spacing="1">推荐深化</text>
+  <g transform="translate(164 265)">
+    <rect width="280" height="280" rx="62" fill="url(#lightLavender)"/>
+    <rect x="1" y="1" width="278" height="278" rx="61" fill="none" stroke="#FFFFFF" stroke-width="2" opacity=".84"/>
+    <g filter="url(#panelShadow2)">
+      <rect x="41" y="43" width="198" height="78" rx="27" fill="#FCFCFA"/>
+    </g>
+    <rect x="58" y="65" width="5" height="32" rx="2.5" fill="#A7AEC9"/>
+    <rect x="217" y="65" width="5" height="32" rx="2.5" fill="#A7AEC9"/>
+    <rect x="76" y="64" width="128" height="15" rx="7.5" fill="#6672A3"/>
+    <rect x="76" y="91" width="85" height="12" rx="6" fill="#A5ABC3"/>
+    <path d="M123 113h34v70c0 9-8 17-17 17s-17-8-17-17v-70z" fill="url(#bridge2)"/>
+    <path d="M140 148l29 24-29 24-17-14v-21z" fill="#91CBB8"/>
+    <path d="M140 148v48l-17-14v-21z" fill="#73B9A3"/>
+    <g filter="url(#panelShadow2)">
+      <rect x="63" y="167" width="179" height="73" rx="24" fill="#FFFDF8"/>
+    </g>
+    <rect x="87" y="190" width="101" height="13" rx="6.5" fill="#6873A2"/>
+    <rect x="87" y="214" width="68" height="11" rx="5.5" fill="#91CBB8"/>
+  </g>
+  <text x="112" y="594" fill="#2C3038" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="27" font-weight="700">01  选译融合 T</text>
+  <text x="112" y="635" fill="#646A75" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18">选中的原文构成横向笔画</text>
+  <text x="112" y="666" fill="#646A75" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18">转换桥落入下方译文浮层</text>
+  <line x1="112" y1="706" x2="496" y2="706" stroke="#E7E6E2"/>
+  <circle cx="126" cy="742" r="5" fill="#91CBB8"/>
+  <text x="145" y="748" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16">功能最完整，T 是流程形成的结果</text>
+
+  <!-- Concept B -->
+  <g filter="url(#cardShadow2)">
+    <rect x="576" y="178" width="448" height="608" rx="34" fill="#FCFCFA"/>
+  </g>
+  <rect x="608" y="210" width="86" height="34" rx="17" fill="#F1F0EC"/>
+  <text x="651" y="233" text-anchor="middle" fill="#777B82" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" letter-spacing="1">更克制</text>
+  <g transform="translate(660 265)">
+    <rect width="280" height="280" rx="62" fill="url(#warmIvory)"/>
+    <rect x="1" y="1" width="278" height="278" rx="61" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+    <rect x="45" y="53" width="190" height="52" rx="19" fill="#E2E4EF"/>
+    <rect x="66" y="70" width="103" height="13" rx="6.5" fill="#6873A2"/>
+    <rect x="179" y="70" width="31" height="13" rx="6.5" fill="#AAB0C8"/>
+    <path d="M124 105h32v71h-32z" fill="#7F89B4"/>
+    <path d="M140 135l38 32-38 31-16-13v-37z" fill="#91CBB8"/>
+    <g filter="url(#panelShadow2)">
+      <rect x="69" y="167" width="185" height="67" rx="22" fill="#FCFCFA"/>
+    </g>
+    <rect x="94" y="189" width="101" height="12" rx="6" fill="#6873A2"/>
+    <rect x="94" y="212" width="69" height="10" rx="5" fill="#9CCDBE"/>
+    <circle cx="224" cy="200" r="10" fill="#E7F2EE"/>
+    <path d="M219 200l4 4 7-8" fill="none" stroke="#69A791" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="608" y="594" fill="#2C3038" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="27" font-weight="700">02  双层转换 T</text>
+  <text x="608" y="635" fill="#646A75" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18">上下两层分别代表原文与译文</text>
+  <text x="608" y="666" fill="#646A75" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18">中间的折带隐约完成 T 的结构</text>
+  <line x1="608" y1="706" x2="992" y2="706" stroke="#E7E6E2"/>
+  <circle cx="622" cy="742" r="5" fill="#6873A2"/>
+  <text x="641" y="748" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16">层级清楚，整体更理性、更工具化</text>
+
+  <!-- Concept C -->
+  <g filter="url(#cardShadow2)">
+    <rect x="1072" y="178" width="448" height="608" rx="34" fill="#FCFCFA"/>
+  </g>
+  <rect x="1104" y="210" width="86" height="34" rx="17" fill="#EDF3F0"/>
+  <text x="1147" y="233" text-anchor="middle" fill="#628C7E" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" letter-spacing="1">更抽象</text>
+  <g transform="translate(1156 265)">
+    <rect width="280" height="280" rx="62" fill="url(#mistSage)"/>
+    <rect x="1" y="1" width="278" height="278" rx="61" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+    <g filter="url(#panelShadow2)">
+      <path d="M48 62c0-12 10-22 22-22h142c12 0 22 10 22 22v29c0 12-10 22-22 22h-47v101c0 12-10 22-22 22h-16c-12 0-22-10-22-22V113H70c-12 0-22-10-22-22V62z" fill="#FCFCFA"/>
+    </g>
+    <rect x="75" y="67" width="68" height="14" rx="7" fill="#6873A2"/>
+    <rect x="151" y="67" width="43" height="14" rx="7" fill="#9BA2BE"/>
+    <path d="M165 113h47c12 0 22-10 22-22V62l-69 51z" fill="#91CBB8"/>
+    <path d="M105 166l60-45v43l-60 45z" fill="#91CBB8"/>
+    <rect x="121" y="198" width="29" height="10" rx="5" fill="#6873A2"/>
+  </g>
+  <text x="1104" y="594" fill="#2C3038" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="27" font-weight="700">03  文字折页 T</text>
+  <text x="1104" y="635" fill="#646A75" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18">T 的横画由两段文本组成</text>
+  <text x="1104" y="666" fill="#646A75" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18">折页代表内容在两种语言间变化</text>
+  <line x1="1104" y1="706" x2="1488" y2="706" stroke="#E7E6E2"/>
+  <circle cx="1118" cy="742" r="5" fill="#91CBB8"/>
+  <text x="1137" y="748" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16">品牌轮廓最强，功能表达更含蓄</text>
+
+  <!-- Context strip -->
+  <g filter="url(#cardShadow2)">
+    <rect x="80" y="832" width="1440" height="184" rx="34" fill="#FCFCFA"/>
+  </g>
+  <text x="116" y="878" fill="#2C3038" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="22" font-weight="700">推荐稿 01 · 浅色体系使用效果</text>
+
+  <!-- 64px -->
+  <g transform="translate(116 905)">
+    <rect width="80" height="80" rx="18" fill="url(#lightLavender)"/>
+    <rect x="12" y="13" width="56" height="24" rx="8" fill="#FCFCFA"/>
+    <rect x="20" y="21" width="34" height="5" rx="2.5" fill="#6873A2"/>
+    <rect x="20" y="30" width="22" height="4" rx="2" fill="#A5ABC3"/>
+    <rect x="35" y="36" width="10" height="17" fill="#7F89B4"/>
+    <path d="M40 43l9 7-9 8-5-4V47z" fill="#91CBB8"/>
+    <rect x="20" y="51" width="51" height="21" rx="7" fill="#FFFDF8"/>
+    <rect x="27" y="58" width="27" height="4" rx="2" fill="#6873A2"/>
+    <rect x="27" y="65" width="18" height="3" rx="1.5" fill="#91CBB8"/>
+  </g>
+  <text x="215" y="937" fill="#4E5460" font-family="Segoe UI, sans-serif" font-size="17">64 px</text>
+  <text x="215" y="965" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15">界面标题 / 快捷方式</text>
+
+  <!-- 32px -->
+  <g transform="translate(442 924)">
+    <rect width="48" height="48" rx="11" fill="url(#lightLavender)"/>
+    <rect x="7" y="8" width="34" height="14" rx="5" fill="#FCFCFA"/>
+    <rect x="12" y="13" width="20" height="3" rx="1.5" fill="#6873A2"/>
+    <rect x="21" y="21" width="6" height="11" fill="#7F89B4"/>
+    <path d="M24 25l6 5-6 5-3-3v-4z" fill="#91CBB8"/>
+    <rect x="12" y="30" width="31" height="13" rx="5" fill="#FFFDF8"/>
+    <rect x="17" y="35" width="16" height="3" rx="1.5" fill="#6873A2"/>
+  </g>
+  <text x="506" y="945" fill="#4E5460" font-family="Segoe UI, sans-serif" font-size="17">32 px</text>
+  <text x="506" y="972" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15">高 DPI 托盘</text>
+
+  <!-- Tray -->
+  <rect x="688" y="902" width="320" height="82" rx="18" fill="#ECECF0"/>
+  <path d="M721 951h13l6-8 6 8h14" fill="none" stroke="#777D88" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="785" cy="943" r="3" fill="#9499A3"/>
+  <g transform="translate(813 931)">
+    <rect width="24" height="24" rx="5.5" fill="#E4E6F1"/>
+    <rect x="4" y="4" width="16" height="7" rx="2.5" fill="#FCFCFA"/>
+    <rect x="7" y="6.5" width="9" height="1.8" rx=".9" fill="#6873A2"/>
+    <rect x="10.5" y="10" width="3" height="5" fill="#7F89B4"/>
+    <rect x="6" y="14" width="16" height="7" rx="2.5" fill="#FFFDF8"/>
+    <rect x="8.5" y="16.5" width="8" height="1.8" rx=".9" fill="#6873A2"/>
+  </g>
+  <text x="854" y="950" fill="#5D626C" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16">20 px 浅色托盘</text>
+
+  <!-- Settings identity -->
+  <rect x="1066" y="902" width="412" height="82" rx="18" fill="#EFEEE9"/>
+  <g transform="translate(1086 917)">
+    <rect width="52" height="52" rx="13" fill="url(#lightLavender)"/>
+    <rect x="8" y="8" width="36" height="15" rx="5" fill="#FCFCFA"/>
+    <rect x="13" y="13" width="21" height="3" rx="1.5" fill="#6873A2"/>
+    <rect x="23" y="22" width="6" height="12" fill="#7F89B4"/>
+    <path d="M26 25l6 5-6 5-3-3v-4z" fill="#91CBB8"/>
+    <rect x="13" y="32" width="33" height="13" rx="5" fill="#FFFDF8"/>
+    <rect x="18" y="37" width="17" height="3" rx="1.5" fill="#6873A2"/>
+  </g>
+  <text x="1156" y="943" fill="#353943" font-family="Segoe UI, sans-serif" font-size="21" font-weight="700">Translay</text>
+  <text x="1156" y="968" fill="#858A93" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">选中文字，即刻理解</text>
+</svg>

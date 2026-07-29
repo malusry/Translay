@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title desc">
+  <title id="title">Translay 接续回环品牌符号</title>
+  <desc id="desc">t 的纵向笔画向下延伸并连续回转成环，横画只保留为次级识别。</desc>
+  <path d="M23 5.8V24.8C23 31.1 28.5 35.6 34.6 33.8C42.2 31.4 44.5 21 39.8 13.8C34 5.3 21.2 4.6 12 11.7C2.4 19.3 3.5 33 12.6 40.5C21.8 48 35.2 45.6 39.2 37.6" fill="none" stroke="currentColor" stroke-width="6.1" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M20.8 13.9H26.2" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

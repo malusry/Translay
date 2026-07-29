@@ -1,0 +1,16 @@
+<!-- Master vector source for the generated application and tray icons. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="translay-icon-flow" x1="24" y1="9" x2="38" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#839a97"/>
+      <stop offset=".52" stop-color="#78858e"/>
+      <stop offset="1" stop-color="#747188"/>
+    </linearGradient>
+    <mask id="translay-icon-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="black"/>
+      <path fill="white" d="M10.5 10C7.8 10 5.8 11.8 6 14C6.2 16.3 8.3 17.8 10.9 17.4C16 16.9 20.8 16.5 25 17C25.2 27.6 25.2 39 26 49C26.4 53.3 28.6 55.5 32 55.5C35.4 55.5 37.6 53.3 38 49C38.8 39 38.8 27.6 39 17C43.2 16.5 48 16.9 53.1 17.4C55.7 17.8 57.8 16.3 58 14C58.2 11.8 56.2 10 53.5 10C46 9.5 39 10.2 32 10.3C25 10.2 18 9.5 10.5 10Z"/>
+      <path d="M34.8 23.2C30.4 24.5 28.8 28.5 30.2 31.5C31 33.2 32.4 33.9 33.9 34.6C36.8 36 36.1 40 33.3 42.8C31.8 44.3 30.2 45.4 28.8 46.3" fill="none" stroke="black" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <rect width="64" height="64" fill="url(#translay-icon-flow)" mask="url(#translay-icon-mask)"/>
+</svg>

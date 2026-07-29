@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="68" y1="54" x2="445" y2="466" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6F5F8"/>
+      <stop offset="1" stop-color="#DDE2F2"/>
+    </linearGradient>
+    <linearGradient id="bridge" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#727DAD"/>
+      <stop offset="1" stop-color="#8E99C0"/>
+    </linearGradient>
+    <filter id="panelShadow" x="-25%" y="-30%" width="150%" height="170%">
+      <feDropShadow dx="0" dy="13" stdDeviation="18" flood-color="#626982" flood-opacity=".17"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="1.5" y="1.5" width="509" height="509" rx="110.5" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-opacity=".76"/>
+
+  <!-- Source selection: its highlighted line becomes the top of the implicit T. -->
+  <g filter="url(#panelShadow)">
+    <rect x="75" y="78" width="362" height="142" rx="46" fill="#FCFCFA"/>
+  </g>
+  <rect x="106" y="118" width="8" height="58" rx="4" fill="#A7AEC9"/>
+  <rect x="398" y="118" width="8" height="58" rx="4" fill="#A7AEC9"/>
+  <rect x="139" y="115" width="236" height="28" rx="14" fill="#6672A3"/>
+  <rect x="139" y="164" width="156" height="22" rx="11" fill="#A5ABC3"/>
+
+  <!-- Translation bridge: visually completes the T and folds into the result. -->
+  <path d="M225 205h62v129c0 17-14 31-31 31s-31-14-31-31V205z" fill="url(#bridge)"/>
+  <path d="M256 270l52 44-52 44-31-25v-38z" fill="#91CBB8"/>
+  <path d="M256 270v88l-31-25v-38z" fill="#73B9A3"/>
+
+  <!-- Floating translation result. -->
+  <g filter="url(#panelShadow)">
+    <rect x="116" y="303" width="326" height="133" rx="42" fill="#FFFDF8"/>
+  </g>
+  <rect x="159" y="344" width="183" height="24" rx="12" fill="#6873A2"/>
+  <rect x="159" y="387" width="124" height="20" rx="10" fill="#91CBB8"/>
+</svg>

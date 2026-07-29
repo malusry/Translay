@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="72" y1="52" x2="438" y2="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6D79BA"/>
+      <stop offset="1" stop-color="#4B5798"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="13" stdDeviation="15" flood-color="#30386D" flood-opacity=".28"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <g filter="url(#softShadow)">
+    <path
+      d="M194 204c0-24 19-43 43-43h137c24 0 43 19 43 43v105c0 24-19 43-43 43h-51l-39 36c-8 7-20 2-20-8v-28h-27c-24 0-43-19-43-43V204z"
+      fill="#75D7BD"
+    />
+    <path
+      d="M95 132c0-24 19-43 43-43h177c24 0 43 19 43 43v111c0 24-19 43-43 43h-69l-46 42c-8 7-20 2-20-8v-34h-42c-24 0-43-19-43-43V132z"
+      fill="#FAF9F5"
+    />
+  </g>
+
+  <rect x="139" y="142" width="145" height="24" rx="12" fill="#5967AE"/>
+  <rect x="139" y="190" width="103" height="24" rx="12" fill="#7E86AA"/>
+  <rect x="303" y="296" width="76" height="18" rx="9" fill="#3F826E"/>
+</svg>

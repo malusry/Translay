@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sourcePanel" x1="86" y1="82" x2="409" y2="238" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#ECEEF3"/>
+    </linearGradient>
+    <linearGradient id="resultPanel" x1="144" y1="264" x2="446" y2="422" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFEFB"/>
+      <stop offset="1" stop-color="#F1F1EE"/>
+    </linearGradient>
+    <linearGradient id="translationBridge" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#6E78A6"/>
+      <stop offset="1" stop-color="#8B94B8"/>
+    </linearGradient>
+    <filter id="desktopShadow" x="-30%" y="-35%" width="165%" height="185%">
+      <feDropShadow dx="0" dy="18" stdDeviation="19" flood-color="#495064" flood-opacity=".19"/>
+    </filter>
+    <filter id="softShadow" x="-25%" y="-30%" width="150%" height="170%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#555D70" flood-opacity=".14"/>
+    </filter>
+  </defs>
+
+  <!-- No enclosing app tile: Windows renders the open-form mark on transparent canvas. -->
+  <g filter="url(#desktopShadow)">
+    <rect x="64" y="72" width="352" height="162" rx="28" fill="url(#sourcePanel)" stroke="#C5CAD7" stroke-width="7"/>
+  </g>
+
+  <!-- Selected source text. The selection itself forms the horizontal arm of T. -->
+  <rect x="103" y="111" width="274" height="52" rx="14" fill="#E0E4F1"/>
+  <rect x="123" y="127" width="198" height="20" rx="10" fill="#6974A3"/>
+  <rect x="337" y="127" width="20" height="20" rx="10" fill="#A2A9C2"/>
+  <rect x="93" y="117" width="7" height="40" rx="3.5" fill="#8F98B7"/>
+  <rect x="380" y="117" width="7" height="40" rx="3.5" fill="#8F98B7"/>
+  <rect x="103" y="185" width="126" height="18" rx="9" fill="#B1B5C3"/>
+
+  <!-- Translation bridge: the vertical arm of T, folded as content changes language. -->
+  <path d="M223 160h58v137c0 16-13 29-29 29s-29-13-29-29V160z" fill="url(#translationBridge)"/>
+  <path d="M252 236l56 46-56 46-29-24v-43z" fill="#8FC7B4"/>
+  <path d="M252 236v92l-29-24v-43z" fill="#70AF9A"/>
+
+  <!-- Translation overlay: a floating desktop tool pane, not a speech bubble. -->
+  <g filter="url(#softShadow)">
+    <rect x="132" y="282" width="320" height="146" rx="24" fill="url(#resultPanel)" stroke="#B9C0CF" stroke-width="7"/>
+  </g>
+  <rect x="174" y="319" width="188" height="22" rx="11" fill="#6873A2"/>
+  <rect x="174" y="361" width="132" height="18" rx="9" fill="#8FC7B4"/>
+  <circle cx="405" cy="330" r="8" fill="#A8AEC0"/>
+</svg>
