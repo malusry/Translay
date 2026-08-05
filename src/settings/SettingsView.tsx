@@ -38,6 +38,7 @@ interface SettingsViewProps {
   status: SettingsStatus;
   onSelectSection: (section: SettingsSection) => void;
   onWindowMouseDown: (event: MouseEvent<HTMLElement>) => void;
+  onMinimize: () => void;
   onClose: () => void;
   onSubmit: (event: FormEvent) => void;
   onSelectMode: (mode: TranslationMode) => void;
@@ -122,6 +123,7 @@ export function SettingsView({
   status,
   onSelectSection,
   onWindowMouseDown,
+  onMinimize,
   onClose,
   onSubmit,
   onSelectMode,
@@ -199,14 +201,26 @@ export function SettingsView({
               </p>
             )}
           </div>
-          <button
-            className="icon-button"
-            type="button"
-            onClick={onClose}
-            aria-label="关闭"
-          >
-            <span className="close-mark" aria-hidden="true" />
-          </button>
+          <div className="window-controls">
+            <button
+              className="icon-button"
+              type="button"
+              onClick={onMinimize}
+              aria-label="最小化"
+              title="最小化"
+            >
+              <span className="minimize-mark" aria-hidden="true" />
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={onClose}
+              aria-label="关闭"
+              title="关闭"
+            >
+              <span className="close-mark" aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
         <form className="settings-form" onSubmit={onSubmit}>

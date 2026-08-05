@@ -3,7 +3,8 @@
   "identifier": "overlay-capability",
   "description": "Allows the local Translay overlay to receive capture events and call application commands.",
   "windows": [
-    "overlay"
+    "overlay",
+    "selection-button"
   ],
   "permissions": [
     "core:event:allow-listen",

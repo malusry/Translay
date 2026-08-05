@@ -71,10 +71,7 @@ pub(super) fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     app.manage(TrayModelSwitch {
         item: model_switch.clone(),
     });
-    let icon = app
-        .default_window_icon()
-        .cloned()
-        .expect("application icon must be configured");
+    let icon = tauri::image::Image::new(include_bytes!("../../icons/tray-32x32.rgba"), 32, 32);
     TrayIconBuilder::new()
         .tooltip("Translay")
         .icon(icon)

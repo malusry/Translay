@@ -60,6 +60,10 @@ impl LanguageProfile {
 #[serde(rename_all = "camelCase")]
 pub struct TranslationRequest {
     pub source_text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_before: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_after: Option<String>,
     pub source_language: String,
     pub detected_language: Option<String>,
     pub language_profile: LanguageProfile,
@@ -83,6 +87,8 @@ impl TranslationRequest {
         Self {
             language_profile: LanguageProfile::analyze(&source_text),
             source_text,
+            context_before: None,
+            context_after: None,
             source_language: AUTO_SOURCE_LANGUAGE.to_owned(),
             detected_language: None,
             target_language: DEFAULT_TARGET_LANGUAGE.to_owned(),
@@ -94,6 +100,25 @@ impl TranslationRequest {
             preserve_format: true,
         }
     }
+
+    pub fn with_academic_context(
+        mut self,
+        context_before: Option<String>,
+        context_after: Option<String>,
+    ) -> Self {
+        if self.mode == TranslationMode::Academic {
+            self.context_before = non_empty_context(context_before);
+            self.context_after = non_empty_context(context_after);
+        }
+        self
+    }
+}
+
+fn non_empty_context(context: Option<String>) -> Option<String> {
+    context.and_then(|value| {
+        let value = value.trim().to_owned();
+        (!value.is_empty()).then_some(value)
+    })
 }
 
 #[derive(Default)]
@@ -288,6 +313,8 @@ mod tests {
         assert_eq!(request.source_language, AUTO_SOURCE_LANGUAGE);
         assert_eq!(request.target_language, DEFAULT_TARGET_LANGUAGE);
         assert_eq!(request.mode, TranslationMode::Academic);
+        assert!(request.context_before.is_none());
+        assert!(request.context_after.is_none());
         assert!(request.preserve_format);
         assert!(request.language_profile.mixed_scripts);
 
@@ -295,5 +322,37 @@ mod tests {
         assert!(serialized.contains(source));
         assert!(serialized.contains("\"sourceLanguage\":\"auto\""));
         assert!(serialized.contains("\"targetLanguage\":\"zh-CN\""));
+    }
+
+    #[test]
+    fn neighboring_context_is_kept_only_for_academic_mode() {
+        let academic = TranslationRequest::new(
+            "The result suggests a correlation.",
+            TranslationMode::Academic,
+            "reader",
+            ContentType::Academic,
+        )
+        .with_academic_context(
+            Some("Previous methodological sentence.".to_owned()),
+            Some("Following limitation sentence.".to_owned()),
+        );
+        assert_eq!(
+            academic.context_before.as_deref(),
+            Some("Previous methodological sentence.")
+        );
+        assert_eq!(
+            academic.context_after.as_deref(),
+            Some("Following limitation sentence.")
+        );
+
+        let conversational = TranslationRequest::new(
+            "That tracks.",
+            TranslationMode::Conversational,
+            "browser",
+            ContentType::Conversation,
+        )
+        .with_academic_context(Some("Hidden context".to_owned()), None);
+        assert!(conversational.context_before.is_none());
+        assert!(conversational.context_after.is_none());
     }
 }

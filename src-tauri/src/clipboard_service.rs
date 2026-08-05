@@ -79,8 +79,9 @@ impl ClipboardFailure {
 pub struct ClipboardService;
 
 impl ClipboardService {
-    /// The fallback is isolated in a dedicated OLE STA and bounded by the caller.
-    /// It is invoked only from the explicit user-hotkey capture pipeline.
+    /// Clipboard capture is isolated in a dedicated OLE STA and bounded by the
+    /// caller. It is used after an explicit translation action, either as a
+    /// hotkey fallback or to validate the passive selection-button candidate.
     pub fn capture_with_timeout(
         context: ForegroundContext,
         cancellation: Arc<CancellationToken>,

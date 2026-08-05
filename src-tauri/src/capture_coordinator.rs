@@ -16,7 +16,7 @@ use crate::{
     models::{CapturePayload, CapturePhase, CapturedSelection},
     overlay_manager::{OverlayManager, cursor_anchor},
     selection_service::{SelectionFailure, SelectionService},
-    translation::{ContentType, LanguageProfile, TranslationRequest},
+    translation::{ContentType, LanguageProfile, TranslationMode, TranslationRequest},
     translation_service::TranslationService,
 };
 
@@ -89,6 +89,8 @@ impl CaptureCoordinator {
                 return;
             }
         };
+        let capture_academic_context =
+            app.state::<ModelConfigStore>().get().mode == TranslationMode::Academic;
         let initial_payload = CapturePayload {
             request_id: request.id,
             phase: CapturePhase::Capturing,
@@ -140,6 +142,7 @@ impl CaptureCoordinator {
                     context.clone(),
                     request.cancellation.clone(),
                     started,
+                    capture_academic_context,
                 );
                 if !coordinator.sessions.is_current(&request) {
                     return;
@@ -154,6 +157,10 @@ impl CaptureCoordinator {
                             model_config.mode,
                             selection.foreground_context.application_name.clone(),
                             ContentType::Unknown,
+                        )
+                        .with_academic_context(
+                            selection.context_before.clone(),
+                            selection.context_after.clone(),
                         );
                         info!(
                             application = %selection.foreground_context.application_name,
@@ -326,6 +333,122 @@ impl CaptureCoordinator {
         }
     }
 
+    /// Starts the normal translation/display half of the pipeline with text
+    /// that the passive selection monitor has already read through UIA.
+    pub fn trigger_captured(&self, app: AppHandle, selection: CapturedSelection) -> bool {
+        let context = selection.foreground_context.clone();
+        if !context.is_valid_and_foreground() {
+            return false;
+        }
+        let request = {
+            let _coordination = self
+                .coordination
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            self.sessions.begin()
+        };
+        self.overlay.begin_request(request.id);
+
+        let started = Instant::now();
+        let language_profile = LanguageProfile::analyze(&selection.text);
+        let model_config = app.state::<ModelConfigStore>().get();
+        let translation_request = TranslationRequest::new(
+            selection.text.clone(),
+            model_config.mode,
+            context.application_name.clone(),
+            ContentType::Unknown,
+        )
+        .with_academic_context(
+            selection.context_before.clone(),
+            selection.context_after.clone(),
+        );
+        let anchor = selection.selection_rect.unwrap_or_else(cursor_anchor);
+        let mut payload = CapturePayload {
+            request_id: request.id,
+            phase: CapturePhase::Translating,
+            success: false,
+            text: String::new(),
+            application_name: context.application_name.clone(),
+            process_id: context.process_id,
+            capture_method: selection.source,
+            elapsed_ms: selection.elapsed_ms,
+            selection_rect: selection.selection_rect,
+            error_code: None,
+            error_message: None,
+            focus_preserved: true,
+            clipboard_restored: selection.clipboard_restored,
+            warning_code: selection.warning_code,
+            language_profile: Some(language_profile),
+            translation_mode: Some(model_config.mode),
+        };
+        info!(
+            application = %context.application_name,
+            capture_method = %payload.capture_method,
+            text_length = selection.text.chars().count(),
+            elapsed_ms = payload.elapsed_ms,
+            error_code = "",
+            "detected selection accepted from translation button"
+        );
+
+        let _coordination = self
+            .coordination
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if !can_commit(
+            self.sessions.is_current(&request),
+            context.is_valid_and_foreground(),
+        ) {
+            return false;
+        }
+
+        let prepared = PreparedTranslation {
+            request: translation_request,
+            backend: model_config.backend,
+        };
+        let mut local_display_gate = None;
+        if should_prestart_translation(prepared.backend) {
+            let (display_ready, wait_for_display) = tauri::async_runtime::channel(1);
+            self.start_translation(
+                app.clone(),
+                request.clone(),
+                payload.clone(),
+                prepared.request.clone(),
+                started,
+                Some(wait_for_display),
+            );
+            local_display_gate = Some(display_ready);
+        }
+
+        match self.overlay.show(&app, &payload, &context, anchor) {
+            Ok(focus_preserved) => {
+                payload.focus_preserved = focus_preserved;
+                if !focus_preserved {
+                    let _ = self.overlay.hide(&app);
+                    return false;
+                }
+            }
+            Err(error) => {
+                error!(
+                    application = %context.application_name,
+                    capture_method = %payload.capture_method,
+                    text_length = 0,
+                    elapsed_ms = payload.elapsed_ms,
+                    error_code = "OVERLAY_SHOW_FAILED",
+                    %error,
+                    "selection-button translation overlay failed to show"
+                );
+                return false;
+            }
+        }
+
+        if let Some(display_ready) = local_display_gate {
+            let _ = display_ready.try_send(());
+        } else {
+            self.start_translation(app, request, payload, prepared.request, started, None);
+        }
+        true
+    }
+
     fn start_translation(
         &self,
         app: AppHandle,
@@ -422,11 +545,19 @@ fn run_pipeline(
     context: ForegroundContext,
     cancellation: Arc<crate::capture_session::CancellationToken>,
     started: Instant,
+    capture_academic_context: bool,
 ) -> Result<CapturedSelection, PipelineFailure> {
-    match SelectionService::capture_with_timeout(context.clone(), cancellation.clone(), UIA_TIMEOUT)
-    {
+    match SelectionService::capture_with_timeout(
+        context.clone(),
+        cancellation.clone(),
+        UIA_TIMEOUT,
+        None,
+        capture_academic_context,
+    ) {
         Ok(selection) => Ok(CapturedSelection {
             text: selection.text,
+            context_before: selection.context_before,
+            context_after: selection.context_after,
             source: selection.method.to_owned(),
             selection_rect: selection.rect,
             foreground_context: context,
@@ -447,6 +578,8 @@ fn run_pipeline(
             match ClipboardService::capture_with_timeout(context.clone(), cancellation) {
                 Ok(capture) => Ok(CapturedSelection {
                     text: capture.text,
+                    context_before: None,
+                    context_after: None,
                     source: CLIPBOARD_METHOD.to_owned(),
                     selection_rect: None,
                     foreground_context: context,

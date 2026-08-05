@@ -71,6 +71,8 @@ pub struct CapturePayload {
 #[derive(Clone, Debug)]
 pub struct CapturedSelection {
     pub text: String,
+    pub context_before: Option<String>,
+    pub context_after: Option<String>,
     pub source: String,
     pub selection_rect: Option<ScreenRect>,
     pub foreground_context: ForegroundContext,

@@ -27,6 +27,37 @@ pub(super) fn create_overlay_window(app: &tauri::AppHandle) -> Result<(), String
         .map_err(|error| format!("初始化浮层 WebView 失败：{error}"))
 }
 
+pub(super) fn create_selection_button_window(app: &tauri::AppHandle) -> Result<(), String> {
+    if app.get_webview_window("selection-button").is_some() {
+        return Ok(());
+    }
+
+    let data_directory = resolve_webview_data_directory(app, "selection-button")?;
+
+    WebviewWindowBuilder::new(
+        app,
+        "selection-button",
+        WebviewUrl::App("index.html?view=selection-button".into()),
+    )
+    .title("Translay")
+    .inner_size(40.0, 40.0)
+    .visible(false)
+    .focused(false)
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .resizable(false)
+    .maximizable(false)
+    .minimizable(false)
+    .closable(false)
+    .transparent(true)
+    .shadow(false)
+    .data_directory(data_directory)
+    .build()
+    .map(|_| ())
+    .map_err(|error| format!("初始化划词翻译按钮失败：{error}"))
+}
+
 fn resolve_webview_data_directory(
     app: &tauri::AppHandle,
     window_label: &str,
@@ -77,7 +108,7 @@ pub(super) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String>
             .skip_taskbar(false)
             .resizable(false)
             .maximizable(false)
-            .minimizable(false)
+            .minimizable(true)
             .closable(false)
             .shadow(true)
             .data_directory(data_directory)
@@ -85,6 +116,9 @@ pub(super) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String>
             .map_err(|error| format!("创建配置窗口失败：{error}"))?
         }
     };
+    window
+        .unminimize()
+        .map_err(|error| format!("恢复配置窗口失败：{error}"))?;
     window
         .show()
         .map_err(|error| format!("显示配置窗口失败：{error}"))?;
@@ -105,4 +139,11 @@ pub(super) fn hide_settings_window(app: &tauri::AppHandle) -> Result<(), String>
         .ok_or_else(|| "找不到配置窗口".to_owned())?
         .hide()
         .map_err(|error| format!("隐藏配置窗口失败：{error}"))
+}
+
+pub(super) fn minimize_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
+    app.get_webview_window("settings")
+        .ok_or_else(|| "找不到配置窗口".to_owned())?
+        .minimize()
+        .map_err(|error| format!("最小化配置窗口失败：{error}"))
 }

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Translay desktop icon V3, 64 pixels">
+  <defs>
+    <linearGradient id="body" x1="17" y1="7" x2="45" y2="59" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#608F89"/><stop offset=".48" stop-color="#566D82"/><stop offset="1" stop-color="#50486D"/>
+    </linearGradient>
+    <linearGradient id="groove" x1="36" y1="22" x2="28" y2="49" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#243845"/><stop offset="1" stop-color="#29243F"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-16%" width="140%" height="145%"><feDropShadow dx="0" dy="1.25" stdDeviation="1.05" flood-color="#0B1321" flood-opacity=".48"/></filter>
+    <path id="mark" d="M12.7 10.4C10 10.4 8.3 12.1 8.5 14.6C8.7 17 10.7 18.4 13.2 18C17.3 17.5 21 17.5 24.4 17.9L24.9 48.2C25.2 53.4 27.9 56.2 32 56.2C36.1 56.2 38.8 53.4 39.1 48.2L39.6 17.9C43 17.5 46.7 17.5 50.8 18C53.3 18.4 55.3 17 55.5 14.6C55.7 12.1 54 10.4 51.3 10.4C44.8 10.1 38.3 10.6 32 10.7C25.7 10.6 19.2 10.1 12.7 10.4Z"/>
+  </defs>
+  <use href="#mark" fill="url(#body)" filter="url(#shadow)"/>
+  <use href="#mark" fill="none" stroke="#111A2A" stroke-width=".9" opacity=".27" transform="translate(.26 .34)"/>
+  <use href="#mark" fill="none" stroke="#E5EFEC" stroke-width=".55" opacity=".12" transform="translate(-.1 -.12)"/>
+  <path d="M12.8 10.7C19.2 10.4 25.7 10.9 32 11C38.3 10.9 44.8 10.4 51.2 10.7C53.2 10.7 54.6 11.7 55 13.2" fill="none" stroke="#E7F1EE" stroke-width=".72" stroke-linecap="round" opacity=".25"/>
+  <path d="M35.2 22.9C30.8 24.2 29.2 28.2 30.6 31.4C31.6 33.7 34.6 34.5 35 37.4C35.5 40.9 32.8 44.4 28.9 47.6" fill="none" stroke="url(#groove)" stroke-width="3.9" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/>
+  <path d="M34.6 22.35C30.7 23.8 29.5 27.6 30.9 30.7" fill="none" stroke="#DBE8E5" stroke-width=".72" stroke-linecap="round" opacity=".25"/>
+</svg>

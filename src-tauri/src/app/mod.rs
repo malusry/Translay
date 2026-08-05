@@ -17,12 +17,13 @@ use crate::{
     capture_coordinator::CaptureCoordinator, credential_store::CredentialStore,
     hotkey_service::HotkeyService, latest_capture_store::LatestCaptureStore,
     model_config::ModelConfigStore, overlay_manager::OverlayManager,
-    single_instance::SingleInstanceGuard, translation_service::TranslationService,
+    selection_button::SelectionButtonManager, single_instance::SingleInstanceGuard,
+    translation_service::TranslationService,
 };
 
 use shutdown::ShutdownCoordinator;
 use tray::setup_tray;
-use windows::{create_overlay_window, show_settings_window};
+use windows::{create_overlay_window, create_selection_button_window, show_settings_window};
 
 pub fn run() {
     let _ = tracing_subscriber::fmt()
@@ -70,6 +71,9 @@ pub fn run() {
     let coordinator = CaptureCoordinator::new(overlay.clone());
     let setup_coordinator = coordinator.clone();
     let handler_coordinator = coordinator.clone();
+    let selection_button = SelectionButtonManager::default();
+    let setup_selection_button = selection_button.clone();
+    let handler_selection_button = selection_button.clone();
     let hotkeys = Arc::new(HotkeyService::default());
     let setup_hotkeys = hotkeys.clone();
     let shutdown = ShutdownCoordinator::new(hotkeys.clone(), coordinator.clone());
@@ -78,6 +82,7 @@ pub fn run() {
         .manage(latest_capture)
         .manage(overlay)
         .manage(coordinator)
+        .manage(selection_button.clone())
         .manage(shutdown)
         .invoke_handler(tauri::generate_handler![
             commands::overlay_frontend_ready,
@@ -87,6 +92,7 @@ pub fn run() {
             commands::set_overlay_hovered,
             commands::fit_overlay_height,
             commands::retry_capture,
+            commands::translate_detected_selection,
             commands::copy_translation,
             commands::get_model_config,
             commands::get_model_api_key_status,
@@ -96,13 +102,21 @@ pub fn run() {
             commands::clear_model_api_key,
             commands::test_model_connection,
             commands::start_settings_dragging,
-            commands::hide_settings_window
+            commands::hide_settings_window,
+            commands::minimize_settings_window
         ])
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        handler_coordinator.trigger(app.clone());
+                        if let Some(selection) = handler_selection_button.take_candidate(app) {
+                            if !handler_coordinator.trigger_captured(app.clone(), selection) {
+                                handler_coordinator.trigger(app.clone());
+                            }
+                        } else {
+                            handler_selection_button.dismiss(app);
+                            handler_coordinator.trigger(app.clone());
+                        }
                     }
                 })
                 .build(),
@@ -112,6 +126,8 @@ pub fn run() {
         .setup(move |app| {
             create_overlay_window(app.handle())
                 .map_err(|error| io::Error::other(format!("创建翻译浮层失败：{error}")))?;
+            create_selection_button_window(app.handle())
+                .map_err(|error| io::Error::other(format!("创建划词翻译按钮失败：{error}")))?;
             let config_store = ModelConfigStore::load(app.handle())
                 .map_err(|error| io::Error::other(format!("加载模型配置失败：{error}")))?;
             let credential_store = CredentialStore;
@@ -138,6 +154,13 @@ pub fn run() {
                 .overlay()
                 .configure_native_style(app.handle())
                 .map_err(|error| io::Error::other(format!("配置浮层 Win32 样式失败：{error}")))?;
+
+            setup_selection_button
+                .configure_native_style(app.handle())
+                .map_err(|error| io::Error::other(format!("配置划词按钮窗口失败：{error}")))?;
+            setup_selection_button
+                .start(app.handle().clone())
+                .map_err(|error| io::Error::other(format!("启动划词检测失败：{error}")))?;
 
             setup_tray(app)
                 .map_err(|error| io::Error::other(format!("创建系统托盘失败：{error}")))?;
@@ -176,6 +199,7 @@ pub fn run() {
             }
         }
         tauri::RunEvent::Exit => {
+            selection_button.stop(handle);
             if hotkeys.unregister(handle).is_err() {
                 error!(
                     application = "Translay",

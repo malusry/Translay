@@ -548,7 +548,10 @@ fn overlay_hwnd(app: &AppHandle) -> Result<HWND, String> {
         .map_err(|error| error.to_string())
 }
 
-fn monitor_metrics(anchor: ScreenRect, source_hwnd: HWND) -> Result<(ScreenRect, u32), String> {
+pub(crate) fn monitor_metrics(
+    anchor: ScreenRect,
+    source_hwnd: HWND,
+) -> Result<(ScreenRect, u32), String> {
     let native_rect = RECT {
         left: anchor.left,
         top: anchor.top,

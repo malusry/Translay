@@ -34,6 +34,7 @@ import {
   getModelApiKeyStatus,
   getModelConfig,
   hideSettingsWindow,
+  minimizeSettingsWindow,
   onModelBackendChanged,
   saveModelProviderConfig,
   saveTranslationPreferences as saveTranslationPreferencesToBackend,
@@ -476,6 +477,10 @@ export function Settings() {
     void hideSettingsWindow();
   };
 
+  const minimize = () => {
+    void minimizeSettingsWindow();
+  };
+
   const startWindowDragging = (event: MouseEvent<HTMLElement>) => {
     if (
       event.button === 0 &&
@@ -549,6 +554,7 @@ export function Settings() {
       status={status}
       onSelectSection={setSection}
       onWindowMouseDown={startWindowDragging}
+      onMinimize={minimize}
       onClose={close}
       onSubmit={handleSave}
       onSelectMode={setMode}

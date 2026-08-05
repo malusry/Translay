@@ -22,8 +22,9 @@ use windows::{
         UI::{
             Accessibility::{
                 CUIAutomation8, IUIAutomation, IUIAutomationElement, IUIAutomationTextPattern,
-                IUIAutomationTextPattern2, IUIAutomationTextRangeArray, UIA_DocumentControlTypeId,
-                UIA_TextPattern2Id, UIA_TextPatternId,
+                IUIAutomationTextPattern2, IUIAutomationTextRange, IUIAutomationTextRangeArray,
+                TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start, TextUnit_Character,
+                UIA_DocumentControlTypeId, UIA_TextPattern2Id, UIA_TextPatternId,
             },
             WindowsAndMessaging::GetCursorPos,
         },
@@ -33,7 +34,10 @@ use windows::{
 
 use crate::{
     capture_session::CancellationToken,
-    config::{UIA_MAX_ANCESTORS, UIA_MAX_CANDIDATES, UIA_MAX_SUBTREE_ELEMENTS, UIA_SEARCH_BUDGET},
+    config::{
+        ACADEMIC_CONTEXT_SIDE_CHARS, UIA_MAX_ANCESTORS, UIA_MAX_CANDIDATES,
+        UIA_MAX_SUBTREE_ELEMENTS, UIA_SEARCH_BUDGET,
+    },
     foreground_context::ForegroundContext,
     models::ScreenRect,
 };
@@ -41,8 +45,16 @@ use crate::{
 #[derive(Debug)]
 pub struct SelectionCapture {
     pub text: String,
+    pub context_before: Option<String>,
+    pub context_after: Option<String>,
     pub rect: Option<ScreenRect>,
     pub method: &'static str,
+}
+
+#[derive(Clone, Copy)]
+pub struct MouseSelectionHint {
+    pub anchor: POINT,
+    pub focus: POINT,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +95,8 @@ impl SelectionService {
         context: ForegroundContext,
         cancellation: std::sync::Arc<CancellationToken>,
         timeout: Duration,
+        mouse_hint: Option<MouseSelectionHint>,
+        capture_academic_context: bool,
     ) -> Result<SelectionCapture, SelectionFailure> {
         let (sender, receiver) = mpsc::sync_channel(1);
         thread::Builder::new()
@@ -91,7 +105,8 @@ impl SelectionService {
                 if cancellation.is_cancelled() {
                     return;
                 }
-                let result = capture_selection(context, &cancellation);
+                let result =
+                    capture_selection(context, &cancellation, mouse_hint, capture_academic_context);
                 if !cancellation.is_cancelled() {
                     let _ = sender.send(result);
                 }
@@ -157,6 +172,8 @@ struct Candidate {
 fn capture_selection(
     context: ForegroundContext,
     cancellation: &CancellationToken,
+    mouse_hint: Option<MouseSelectionHint>,
+    capture_academic_context: bool,
 ) -> Result<SelectionCapture, SelectionFailure> {
     let _apartment =
         ComApartment::initialize().map_err(|error| SelectionFailure::windows("COM_INIT", error))?;
@@ -303,7 +320,12 @@ fn capture_selection(
                 .GetCurrentPatternAs::<IUIAutomationTextPattern2>(UIA_TextPattern2Id)
         } {
             saw_text_pattern = true;
-            match read_pattern_selection(&pattern, "UIA:TextPattern2") {
+            match read_pattern_selection(
+                &pattern,
+                "UIA:TextPattern2",
+                mouse_hint,
+                capture_academic_context,
+            ) {
                 Ok(capture) => return Ok(capture),
                 Err(PatternReadError::Empty) => saw_empty_selection = true,
                 Err(PatternReadError::Windows(stage, error)) => {
@@ -320,7 +342,12 @@ fn capture_selection(
                 .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
         } {
             saw_text_pattern = true;
-            match read_pattern_selection(&pattern, "UIA:TextPattern") {
+            match read_pattern_selection(
+                &pattern,
+                "UIA:TextPattern",
+                mouse_hint,
+                capture_academic_context,
+            ) {
                 Ok(capture) => return Ok(capture),
                 Err(PatternReadError::Empty) => saw_empty_selection = true,
                 Err(PatternReadError::Windows(stage, error)) => {
@@ -511,15 +538,26 @@ enum PatternReadError {
 fn read_pattern_selection(
     pattern: &IUIAutomationTextPattern,
     method: &'static str,
+    mouse_hint: Option<MouseSelectionHint>,
+    capture_academic_context: bool,
 ) -> Result<SelectionCapture, PatternReadError> {
     let ranges = unsafe { pattern.GetSelection() }
         .map_err(|error| PatternReadError::Windows("GET_SELECTION", error))?;
-    read_ranges(ranges, method)
+    read_ranges(
+        pattern,
+        ranges,
+        method,
+        mouse_hint,
+        capture_academic_context,
+    )
 }
 
 fn read_ranges(
+    pattern: &IUIAutomationTextPattern,
     ranges: IUIAutomationTextRangeArray,
     method: &'static str,
+    mouse_hint: Option<MouseSelectionHint>,
+    capture_academic_context: bool,
 ) -> Result<SelectionCapture, PatternReadError> {
     let length = unsafe { ranges.Length() }
         .map_err(|error| PatternReadError::Windows("SELECTION_LENGTH", error))?;
@@ -528,10 +566,27 @@ fn read_ranges(
     }
 
     let mut text_parts = Vec::new();
-    let mut union_rect: Option<ScreenRect> = None;
+    let mut rectangles = Vec::new();
+    let mut point_refined = false;
+    let mut context_before = None;
+    let mut context_after = None;
     for index in 0..length {
-        let range = unsafe { ranges.GetElement(index) }
+        let selected_range = unsafe { ranges.GetElement(index) }
             .map_err(|error| PatternReadError::Windows("SELECTION_RANGE", error))?;
+        let range = if length == 1 {
+            mouse_hint
+                .and_then(|hint| refine_text_range_to_mouse_focus(pattern, &selected_range, hint))
+                .map(|range| {
+                    point_refined = true;
+                    range
+                })
+                .unwrap_or(selected_range)
+        } else {
+            selected_range
+        };
+        if capture_academic_context && length == 1 {
+            (context_before, context_after) = read_adjacent_context(&range);
+        }
         let text = unsafe { range.GetText(-1) }
             .map_err(|error| PatternReadError::Windows("GET_TEXT", error))?;
         let text = String::from_utf16_lossy(&text);
@@ -542,26 +597,282 @@ fn read_ranges(
         // Bounding rectangles are optional. Text remains a valid capture when a
         // provider returns no geometry; the overlay will anchor to the cursor.
         if let Ok(safe_array) = unsafe { range.GetBoundingRectangles() } {
-            if let Ok(rectangles) = unsafe { safe_array_rectangles(safe_array) } {
-                for rect in rectangles {
-                    union_rect = Some(match union_rect {
-                        Some(current) => current.union(rect),
-                        None => rect,
-                    });
-                }
+            if let Ok(range_rectangles) = unsafe { safe_array_rectangles(safe_array) } {
+                rectangles.extend(range_rectangles);
             }
         }
     }
 
     let text = text_parts.join("\n");
+    let (text, rectangles, geometry_refined) =
+        refine_selection_with_mouse_hint(text, rectangles, mouse_hint);
     if text.trim().is_empty() {
         return Err(PatternReadError::Empty);
     }
+    let union_rect = rectangles.into_iter().reduce(ScreenRect::union);
     Ok(SelectionCapture {
         text,
+        context_before,
+        context_after,
         rect: union_rect.filter(|rect| rect.width() > 0 && rect.height() > 0),
-        method,
+        method: if point_refined {
+            match method {
+                "UIA:TextPattern2" => "UIA:TextPattern2:MousePoint",
+                _ => "UIA:TextPattern:MousePoint",
+            }
+        } else if geometry_refined {
+            match method {
+                "UIA:TextPattern2" => "UIA:TextPattern2:MouseGeometry",
+                _ => "UIA:TextPattern:MouseGeometry",
+            }
+        } else {
+            method
+        },
     })
+}
+
+/// Edge's PDF provider can occasionally report a selection whose final range
+/// reaches into the following visual line. RangeFromPoint gives us the text
+/// insertion position nearest the actual mouse-up coordinate, so only the
+/// release-side endpoint is allowed to move inward to that position.
+fn refine_text_range_to_mouse_focus(
+    pattern: &IUIAutomationTextPattern,
+    selected_range: &IUIAutomationTextRange,
+    mouse_hint: MouseSelectionHint,
+) -> Option<IUIAutomationTextRange> {
+    let anchor_range = unsafe { pattern.RangeFromPoint(mouse_hint.anchor) }.ok()?;
+    let focus_range = unsafe { pattern.RangeFromPoint(mouse_hint.focus) }.ok()?;
+    let anchor_vs_focus = unsafe {
+        anchor_range.CompareEndpoints(
+            TextPatternRangeEndpoint_Start,
+            &focus_range,
+            TextPatternRangeEndpoint_Start,
+        )
+    }
+    .ok()?;
+    let selection_start_vs_focus = unsafe {
+        selected_range.CompareEndpoints(
+            TextPatternRangeEndpoint_Start,
+            &focus_range,
+            TextPatternRangeEndpoint_Start,
+        )
+    }
+    .ok()?;
+    let selection_end_vs_focus = unsafe {
+        selected_range.CompareEndpoints(
+            TextPatternRangeEndpoint_End,
+            &focus_range,
+            TextPatternRangeEndpoint_Start,
+        )
+    }
+    .ok()?;
+
+    let endpoint = endpoint_to_clamp(
+        anchor_vs_focus,
+        selection_start_vs_focus,
+        selection_end_vs_focus,
+    )?;
+    let refined_range = unsafe { selected_range.Clone() }.ok()?;
+    unsafe {
+        refined_range.MoveEndpointByRange(endpoint, &focus_range, TextPatternRangeEndpoint_Start)
+    }
+    .ok()?;
+    let text = unsafe { refined_range.GetText(-1) }.ok()?;
+    (!String::from_utf16_lossy(&text).trim().is_empty()).then_some(refined_range)
+}
+
+fn endpoint_to_clamp(
+    anchor_vs_focus: i32,
+    selection_start_vs_focus: i32,
+    selection_end_vs_focus: i32,
+) -> Option<windows::Win32::UI::Accessibility::TextPatternRangeEndpoint> {
+    // The focus point must be inside the provider's selected range. This keeps
+    // RangeFromPoint from ever expanding the selection when a provider returns
+    // an unrelated nearby text position.
+    if selection_start_vs_focus > 0 || selection_end_vs_focus < 0 {
+        return None;
+    }
+
+    if anchor_vs_focus <= 0 && selection_end_vs_focus > 0 {
+        Some(TextPatternRangeEndpoint_End)
+    } else if anchor_vs_focus > 0 && selection_start_vs_focus < 0 {
+        Some(TextPatternRangeEndpoint_Start)
+    } else {
+        None
+    }
+}
+
+fn read_adjacent_context(
+    selected_range: &IUIAutomationTextRange,
+) -> (Option<String>, Option<String>) {
+    let context_before = (|| {
+        let range = unsafe { selected_range.Clone() }.ok()?;
+        unsafe {
+            range.MoveEndpointByRange(
+                TextPatternRangeEndpoint_End,
+                selected_range,
+                TextPatternRangeEndpoint_Start,
+            )
+        }
+        .ok()?;
+        unsafe {
+            range.MoveEndpointByUnit(
+                TextPatternRangeEndpoint_Start,
+                TextUnit_Character,
+                -ACADEMIC_CONTEXT_SIDE_CHARS,
+            )
+        }
+        .ok()?;
+        read_context_range(&range, true)
+    })();
+
+    let context_after = (|| {
+        let range = unsafe { selected_range.Clone() }.ok()?;
+        unsafe {
+            range.MoveEndpointByRange(
+                TextPatternRangeEndpoint_Start,
+                selected_range,
+                TextPatternRangeEndpoint_End,
+            )
+        }
+        .ok()?;
+        unsafe {
+            range.MoveEndpointByUnit(
+                TextPatternRangeEndpoint_End,
+                TextUnit_Character,
+                ACADEMIC_CONTEXT_SIDE_CHARS,
+            )
+        }
+        .ok()?;
+        read_context_range(&range, false)
+    })();
+
+    (context_before, context_after)
+}
+
+fn read_context_range(range: &IUIAutomationTextRange, before: bool) -> Option<String> {
+    let text = unsafe { range.GetText(-1) }.ok()?;
+    let text = String::from_utf16_lossy(&text);
+    nearest_sentence_context(&text, before)
+}
+
+fn nearest_sentence_context(text: &str, before: bool) -> Option<String> {
+    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let clipped = if before {
+        take_suffix_chars(&normalized, ACADEMIC_CONTEXT_SIDE_CHARS as usize)
+    } else {
+        normalized
+            .chars()
+            .take(ACADEMIC_CONTEXT_SIDE_CHARS as usize)
+            .collect()
+    };
+    let characters = clipped.chars().collect::<Vec<_>>();
+    if characters.is_empty() {
+        return None;
+    }
+
+    let sentence = if before {
+        let search_end = characters
+            .len()
+            .saturating_sub(usize::from(is_sentence_boundary(
+                &characters,
+                characters.len() - 1,
+            )));
+        let start = (0..search_end)
+            .rev()
+            .find(|index| is_sentence_boundary(&characters, *index))
+            .map_or(0, |index| index + 1);
+        characters[start..].iter().collect::<String>()
+    } else {
+        let end = (0..characters.len())
+            .find(|index| is_sentence_boundary(&characters, *index))
+            .map_or(characters.len(), |index| index + 1);
+        characters[..end].iter().collect::<String>()
+    };
+    let sentence = sentence.trim().to_owned();
+    (!sentence.is_empty()).then_some(sentence)
+}
+
+fn take_suffix_chars(text: &str, limit: usize) -> String {
+    let character_count = text.chars().count();
+    text.chars()
+        .skip(character_count.saturating_sub(limit))
+        .collect()
+}
+
+fn is_sentence_boundary(characters: &[char], index: usize) -> bool {
+    match characters[index] {
+        '!' | '?' | '。' | '！' | '？' => true,
+        '.' => characters
+            .get(index + 1)
+            .is_none_or(|character| character.is_whitespace()),
+        _ => false,
+    }
+}
+
+fn refine_selection_with_mouse_hint(
+    text: String,
+    rectangles: Vec<ScreenRect>,
+    mouse_hint: Option<MouseSelectionHint>,
+) -> (String, Vec<ScreenRect>, bool) {
+    let Some(mouse_hint) = mouse_hint else {
+        return (text, rectangles, false);
+    };
+    if rectangles.len() <= 1 {
+        return (text, rectangles, false);
+    }
+
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let lines = normalized.lines().collect::<Vec<_>>();
+    let visible_line_indices = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| (!line.trim().is_empty()).then_some(index))
+        .collect::<Vec<_>>();
+    if visible_line_indices.len() != rectangles.len() {
+        return (text, rectangles, false);
+    }
+
+    let anchor_line = nearest_rectangle(mouse_hint.anchor, &rectangles);
+    let focus_line = nearest_rectangle(mouse_hint.focus, &rectangles);
+    let first_line = anchor_line.min(focus_line);
+    let last_line = anchor_line.max(focus_line);
+    if first_line == 0 && last_line + 1 == rectangles.len() {
+        return (text, rectangles, false);
+    }
+
+    let first_text_line = visible_line_indices[first_line];
+    let last_text_line = visible_line_indices[last_line];
+    let refined_text = lines[first_text_line..=last_text_line].join("\n");
+    let refined_rectangles = rectangles[first_line..=last_line].to_vec();
+    (refined_text, refined_rectangles, true)
+}
+
+fn nearest_rectangle(point: POINT, rectangles: &[ScreenRect]) -> usize {
+    rectangles
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, rectangle)| squared_distance_to_rectangle(point, **rectangle))
+        .map(|(index, _)| index)
+        .unwrap_or(0)
+}
+
+fn squared_distance_to_rectangle(point: POINT, rectangle: ScreenRect) -> i64 {
+    let horizontal = if point.x < rectangle.left {
+        i64::from(rectangle.left) - i64::from(point.x)
+    } else if point.x >= rectangle.right {
+        i64::from(point.x) - i64::from(rectangle.right) + 1
+    } else {
+        0
+    };
+    let vertical = if point.y < rectangle.top {
+        i64::from(rectangle.top) - i64::from(point.y)
+    } else if point.y >= rectangle.bottom {
+        i64::from(point.y) - i64::from(rectangle.bottom) + 1
+    } else {
+        0
+    };
+    horizontal * horizontal + vertical * vertical
 }
 
 /// UIA returns physical screen pixels as groups of left/top/width/height.
@@ -644,10 +955,169 @@ mod tests {
     fn text_without_geometry_is_a_valid_capture_shape() {
         let capture = SelectionCapture {
             text: "selected".to_owned(),
+            context_before: None,
+            context_after: None,
             rect: None,
             method: "UIA:TextPattern",
         };
         assert!(!capture.text.is_empty());
         assert!(capture.rect.is_none());
+    }
+
+    #[test]
+    fn academic_context_keeps_only_the_nearest_sentence_on_each_side() {
+        assert_eq!(
+            nearest_sentence_context("An older sentence. The immediately preceding claim.", true,)
+                .as_deref(),
+            Some("The immediately preceding claim.")
+        );
+        assert_eq!(
+            nearest_sentence_context(
+                "The immediately following limitation. A later sentence.",
+                false,
+            )
+            .as_deref(),
+            Some("The immediately following limitation.")
+        );
+    }
+
+    #[test]
+    fn academic_context_preserves_a_partial_neighboring_sentence() {
+        assert_eq!(
+            nearest_sentence_context("Earlier sentence. because the baseline", true).as_deref(),
+            Some("because the baseline")
+        );
+        assert_eq!(
+            nearest_sentence_context("depends on the initialization. Later sentence.", false)
+                .as_deref(),
+            Some("depends on the initialization.")
+        );
+    }
+
+    #[test]
+    fn mouse_geometry_removes_a_provider_only_trailing_line() {
+        let rectangles = vec![line_rect(100), line_rect(124)];
+        let hint = MouseSelectionHint {
+            anchor: POINT { x: 120, y: 108 },
+            focus: POINT { x: 480, y: 108 },
+        };
+
+        let (text, rectangles, refined) = refine_selection_with_mouse_hint(
+            "selected line\nunexpected next line".to_owned(),
+            rectangles,
+            Some(hint),
+        );
+
+        assert_eq!(text, "selected line");
+        assert_eq!(rectangles, [line_rect(100)]);
+        assert!(refined);
+    }
+
+    #[test]
+    fn mouse_geometry_preserves_an_intentional_multiline_selection() {
+        let rectangles = vec![line_rect(100), line_rect(124)];
+        let hint = MouseSelectionHint {
+            anchor: POINT { x: 120, y: 108 },
+            focus: POINT { x: 480, y: 132 },
+        };
+
+        let (text, kept_rectangles, refined) = refine_selection_with_mouse_hint(
+            "first line\nsecond line".to_owned(),
+            rectangles.clone(),
+            Some(hint),
+        );
+
+        assert_eq!(text, "first line\nsecond line");
+        assert_eq!(kept_rectangles, rectangles);
+        assert!(!refined);
+    }
+
+    #[test]
+    fn mouse_geometry_preserves_blank_paragraph_spacing_while_trimming_the_next_line() {
+        let rectangles = vec![line_rect(100), line_rect(148), line_rect(172)];
+        let hint = MouseSelectionHint {
+            anchor: POINT { x: 120, y: 108 },
+            focus: POINT { x: 480, y: 156 },
+        };
+
+        let (text, kept_rectangles, refined) = refine_selection_with_mouse_hint(
+            "first paragraph line\n\nsecond paragraph ending\nunexpected next line".to_owned(),
+            rectangles,
+            Some(hint),
+        );
+
+        assert_eq!(text, "first paragraph line\n\nsecond paragraph ending");
+        assert_eq!(kept_rectangles, [line_rect(100), line_rect(148)]);
+        assert!(refined);
+    }
+
+    #[test]
+    fn mouse_geometry_refuses_to_guess_when_text_and_rows_do_not_match() {
+        let rectangles = vec![line_rect(100), line_rect(124)];
+        let hint = MouseSelectionHint {
+            anchor: POINT { x: 120, y: 108 },
+            focus: POINT { x: 480, y: 108 },
+        };
+
+        let (text, kept_rectangles, refined) = refine_selection_with_mouse_hint(
+            "provider text without a line boundary".to_owned(),
+            rectangles.clone(),
+            Some(hint),
+        );
+
+        assert_eq!(text, "provider text without a line boundary");
+        assert_eq!(kept_rectangles, rectangles);
+        assert!(!refined);
+    }
+
+    #[test]
+    fn mouse_geometry_handles_a_backward_selection() {
+        let rectangles = vec![line_rect(100), line_rect(124), line_rect(148)];
+        let hint = MouseSelectionHint {
+            anchor: POINT { x: 480, y: 156 },
+            focus: POINT { x: 120, y: 132 },
+        };
+
+        let (text, kept_rectangles, refined) = refine_selection_with_mouse_hint(
+            "unexpected prior line\nselected middle line\nselected final line".to_owned(),
+            rectangles,
+            Some(hint),
+        );
+
+        assert_eq!(text, "selected middle line\nselected final line");
+        assert_eq!(kept_rectangles, [line_rect(124), line_rect(148)]);
+        assert!(refined);
+    }
+
+    #[test]
+    fn mouse_point_clamps_a_provider_range_after_the_forward_drag_focus() {
+        assert_eq!(
+            endpoint_to_clamp(-1, -1, 1),
+            Some(TextPatternRangeEndpoint_End)
+        );
+    }
+
+    #[test]
+    fn mouse_point_clamps_a_provider_range_before_the_backward_drag_focus() {
+        assert_eq!(
+            endpoint_to_clamp(1, -1, 1),
+            Some(TextPatternRangeEndpoint_Start)
+        );
+    }
+
+    #[test]
+    fn mouse_point_does_not_expand_or_change_an_already_exact_range() {
+        assert_eq!(endpoint_to_clamp(-1, -1, 0), None);
+        assert_eq!(endpoint_to_clamp(-1, 1, 1), None);
+        assert_eq!(endpoint_to_clamp(1, -1, -1), None);
+    }
+
+    fn line_rect(top: i32) -> ScreenRect {
+        ScreenRect {
+            left: 100,
+            top,
+            right: 500,
+            bottom: top + 18,
+        }
     }
 }

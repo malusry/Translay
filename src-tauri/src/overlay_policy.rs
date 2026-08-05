@@ -357,6 +357,20 @@ mod tests {
     }
 
     #[test]
+    fn five_dictionary_senses_expand_into_separate_rows() {
+        let dictionary = payload(
+            24,
+            "1. n. first meaning\n2. v. second meaning\n3. adj. third meaning\n4. n. fourth meaning\n5. v. fifth meaning",
+        );
+
+        let size = overlay_logical_size(&dictionary, OVERLAY_RESULT_MAX_WIDTH);
+
+        assert_eq!(size.height, 185);
+        assert!(size.height > OVERLAY_COMPACT_HEIGHT);
+        assert!(size.height <= OVERLAY_RESULT_MAX_HEIGHT);
+    }
+
+    #[test]
     fn reading_time_uses_three_effective_character_tiers() {
         assert_eq!(
             auto_hide_delay(&payload(20, &"译".repeat(32))),

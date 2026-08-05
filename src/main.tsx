@@ -2,18 +2,25 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "./shared/base.css";
 
-const isSettings =
-  new URLSearchParams(window.location.search).get("view") === "settings";
+const selectedView = new URLSearchParams(window.location.search).get("view");
 const root = ReactDOM.createRoot(document.getElementById("root")!);
 
 async function renderSelectedView() {
-  if (isSettings) {
+  if (selectedView === "settings") {
     const { Settings } = await import("./settings/Settings");
     root.render(
       <React.StrictMode>
         <Settings />
       </React.StrictMode>,
     );
+    return;
+  }
+
+  if (selectedView === "selection-button") {
+    const { SelectionButton } = await import(
+      "./selection-button/SelectionButton"
+    );
+    root.render(<SelectionButton />);
     return;
   }
 

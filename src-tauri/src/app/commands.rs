@@ -4,7 +4,8 @@ use tracing::info;
 
 use crate::{
     capture_coordinator::CaptureCoordinator,
-    clipboard_service::ClipboardService,
+    capture_session::CaptureSession,
+    clipboard_service::{CLIPBOARD_METHOD, ClipboardService},
     credential_store::CredentialStore,
     latest_capture_store::LatestCaptureStore,
     model_config::{
@@ -13,6 +14,7 @@ use crate::{
     },
     models,
     overlay_manager::OverlayManager,
+    selection_button::SelectionButtonManager,
     translation::TranslationMode,
     translation_service::{ConnectionTestResult, TranslationService},
 };
@@ -85,6 +87,36 @@ pub(super) fn retry_capture(
     coordinator: tauri::State<'_, CaptureCoordinator>,
 ) {
     coordinator.trigger(app);
+}
+
+#[tauri::command]
+pub(super) fn translate_detected_selection(
+    app: tauri::AppHandle,
+    coordinator: tauri::State<'_, CaptureCoordinator>,
+    selection_button: tauri::State<'_, SelectionButtonManager>,
+) -> bool {
+    let Some(selection) = selection_button.take_candidate(&app) else {
+        return false;
+    };
+    let selection = validate_detected_selection_with_clipboard(selection);
+    coordinator.trigger_captured(app, selection)
+}
+
+fn validate_detected_selection_with_clipboard(
+    mut selection: models::CapturedSelection,
+) -> models::CapturedSelection {
+    let validation_session = CaptureSession::default();
+    let request = validation_session.begin();
+    if let Ok(capture) = ClipboardService::capture_with_timeout(
+        selection.foreground_context.clone(),
+        request.cancellation,
+    ) {
+        selection.text = capture.text;
+        selection.source = format!("{CLIPBOARD_METHOD}:SelectionValidation");
+        selection.clipboard_restored = Some(capture.restored);
+        selection.warning_code = capture.warning_code;
+    }
+    selection
 }
 
 #[tauri::command]
@@ -224,4 +256,9 @@ pub(super) fn start_settings_dragging(app: tauri::AppHandle) -> Result<(), Strin
 #[tauri::command]
 pub(super) fn hide_settings_window(app: tauri::AppHandle) -> Result<(), String> {
     windows::hide_settings_window(&app)
+}
+
+#[tauri::command]
+pub(super) fn minimize_settings_window(app: tauri::AppHandle) -> Result<(), String> {
+    windows::minimize_settings_window(&app)
 }

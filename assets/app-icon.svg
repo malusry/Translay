@@ -1,16 +1,26 @@
-<!-- Master vector source for the generated application and tray icons. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<!-- Master vector source for the generated transparent application icon. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Translay desktop icon V3</title>
+  <desc id="desc">A transparent T-shaped tool mark with a recessed translation groove.</desc>
   <defs>
-    <linearGradient id="translay-icon-flow" x1="24" y1="9" x2="38" y2="56" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#839a97"/>
-      <stop offset=".52" stop-color="#78858e"/>
-      <stop offset="1" stop-color="#747188"/>
+    <linearGradient id="translay-icon-body" x1="17" y1="7" x2="45" y2="59" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#608F89"/>
+      <stop offset=".48" stop-color="#566D82"/>
+      <stop offset="1" stop-color="#50486D"/>
     </linearGradient>
-    <mask id="translay-icon-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
-      <rect width="64" height="64" fill="black"/>
-      <path fill="white" d="M10.5 10C7.8 10 5.8 11.8 6 14C6.2 16.3 8.3 17.8 10.9 17.4C16 16.9 20.8 16.5 25 17C25.2 27.6 25.2 39 26 49C26.4 53.3 28.6 55.5 32 55.5C35.4 55.5 37.6 53.3 38 49C38.8 39 38.8 27.6 39 17C43.2 16.5 48 16.9 53.1 17.4C55.7 17.8 57.8 16.3 58 14C58.2 11.8 56.2 10 53.5 10C46 9.5 39 10.2 32 10.3C25 10.2 18 9.5 10.5 10Z"/>
-      <path d="M34.8 23.2C30.4 24.5 28.8 28.5 30.2 31.5C31 33.2 32.4 33.9 33.9 34.6C36.8 36 36.1 40 33.3 42.8C31.8 44.3 30.2 45.4 28.8 46.3" fill="none" stroke="black" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-    </mask>
+    <linearGradient id="translay-icon-groove" x1="36" y1="22" x2="28" y2="49" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#243845"/>
+      <stop offset="1" stop-color="#29243F"/>
+    </linearGradient>
+    <filter id="translay-icon-shadow" x="-20%" y="-16%" width="140%" height="145%">
+      <feDropShadow dx="0" dy="1.25" stdDeviation="1.05" flood-color="#0B1321" flood-opacity=".48"/>
+    </filter>
+    <path id="translay-icon-mark" d="M12.7 10.4C10 10.4 8.3 12.1 8.5 14.6C8.7 17 10.7 18.4 13.2 18C17.3 17.5 21 17.5 24.4 17.9L24.9 48.2C25.2 53.4 27.9 56.2 32 56.2C36.1 56.2 38.8 53.4 39.1 48.2L39.6 17.9C43 17.5 46.7 17.5 50.8 18C53.3 18.4 55.3 17 55.5 14.6C55.7 12.1 54 10.4 51.3 10.4C44.8 10.1 38.3 10.6 32 10.7C25.7 10.6 19.2 10.1 12.7 10.4Z"/>
   </defs>
-  <rect width="64" height="64" fill="url(#translay-icon-flow)" mask="url(#translay-icon-mask)"/>
+  <use href="#translay-icon-mark" fill="url(#translay-icon-body)" filter="url(#translay-icon-shadow)"/>
+  <use href="#translay-icon-mark" fill="none" stroke="#111A2A" stroke-width=".9" opacity=".27" transform="translate(.26 .34)"/>
+  <use href="#translay-icon-mark" fill="none" stroke="#E5EFEC" stroke-width=".55" opacity=".12" transform="translate(-.1 -.12)"/>
+  <path d="M12.8 10.7C19.2 10.4 25.7 10.9 32 11C38.3 10.9 44.8 10.4 51.2 10.7C53.2 10.7 54.6 11.7 55 13.2" fill="none" stroke="#E7F1EE" stroke-width=".72" stroke-linecap="round" opacity=".25"/>
+  <path d="M35.2 22.9C30.8 24.2 29.2 28.2 30.6 31.4C31.6 33.7 34.6 34.5 35 37.4C35.5 40.9 32.8 44.4 28.9 47.6" fill="none" stroke="url(#translay-icon-groove)" stroke-width="3.9" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/>
+  <path d="M34.6 22.35C30.7 23.8 29.5 27.6 30.9 30.7" fill="none" stroke="#DBE8E5" stroke-width=".72" stroke-linecap="round" opacity=".25"/>
 </svg>

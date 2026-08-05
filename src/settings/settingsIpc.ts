@@ -15,6 +15,7 @@ const commands = {
   getModelApiKeyStatus: "get_model_api_key_status",
   getModelConfig: "get_model_config",
   hideSettingsWindow: "hide_settings_window",
+  minimizeSettingsWindow: "minimize_settings_window",
   saveModelProviderConfig: "save_model_provider_config",
   saveTranslationPreferences: "save_translation_preferences",
   startSettingsDragging: "start_settings_dragging",
@@ -69,6 +70,10 @@ export function activateModelBackend(
 
 export function hideSettingsWindow(): Promise<void> {
   return invoke(commands.hideSettingsWindow);
+}
+
+export function minimizeSettingsWindow(): Promise<void> {
+  return invoke(commands.minimizeSettingsWindow);
 }
 
 export function startSettingsDragging(): Promise<void> {

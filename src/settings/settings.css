@@ -195,13 +195,20 @@ button {
   box-shadow: 0 0 0 2px rgba(176, 139, 85, 0.12);
 }
 
+.window-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  margin-top: -8px;
+  margin-right: -8px;
+}
+
 .icon-button {
   position: relative;
   display: grid;
   width: 28px;
   height: 28px;
-  margin-top: -8px;
-  margin-right: -8px;
   border: 0;
   border-radius: 8px;
   place-items: center;
@@ -211,6 +218,14 @@ button {
     color 130ms ease,
     background 130ms ease,
     transform 130ms ease;
+}
+
+.minimize-mark {
+  display: block;
+  width: 12px;
+  height: 1.4px;
+  border-radius: 999px;
+  background: currentColor;
 }
 
 .close-mark {
@@ -226,7 +241,7 @@ button {
   top: 50%;
   left: 50%;
   width: 12px;
-  height: 1.4px;
+  height: 1.65px;
   border-radius: 999px;
   background: currentColor;
   content: "";
