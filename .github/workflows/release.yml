@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: translay-v0.3.0-beta-release
+  group: translay-v0.3.0-release
   cancel-in-progress: false
 
 jobs:
@@ -39,24 +39,27 @@ jobs:
       - name: Run checks
         run: npm run check
 
-      - name: Build draft release
+      - name: Build release
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v0.3.0-beta.1
-          releaseName: "Translay v0.3.0 Beta 1"
+          tagName: v0.3.0
+          releaseName: "Translay v0.3.0"
           releaseBody: |
-            Translay 的首个公开 Windows Beta 版本。
+            Translay v0.3.0 Windows 正式版。
 
             主要功能：
-            - 通过 Ctrl+Shift+T 翻译其他应用中选中的文字
+            - 选中文字后显示轻量翻译按钮，点击即可翻译
+            - 保留 Ctrl+Shift+T 全局快捷键翻译方式
+            - 改进 UI Automation、剪贴板回退与翻译请求协调
+            - 使用全新的透明渐变 T 桌面图标与专用托盘图标
             - 支持本地 OpenAI-compatible 服务与远程 API
             - 支持口语、学术风格和模型思考开关
             - API Key 仅保存在 Windows 凭据管理器
 
-            下载 `setup.exe` 完成当前用户安装。此 Beta 尚未进行商业代码签名，
+            下载 `setup.exe` 完成当前用户安装。本版本尚未进行商业代码签名，
             Windows 可能显示来源未知提示，请只从本仓库下载。
-          releaseDraft: true
-          prerelease: true
+          releaseDraft: false
+          prerelease: false
           args: "--bundles nsis"
