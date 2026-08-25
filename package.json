@@ -1,7 +1,7 @@
 {
   "name": "translay",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A lightweight Windows selection translation tool powered by local or OpenAI-compatible models.",
   "license": "MIT",
   "repository": {

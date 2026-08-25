@@ -1,7 +1,9 @@
 mod commands;
+mod local_model_detection;
 mod model_backend;
 mod shutdown;
 mod tray;
+mod tray_feedback;
 mod windows;
 
 use std::{io, sync::Arc};
@@ -23,7 +25,11 @@ use crate::{
 
 use shutdown::ShutdownCoordinator;
 use tray::setup_tray;
-use windows::{create_overlay_window, create_selection_button_window, show_settings_window};
+use tray_feedback::TrayFeedbackManager;
+use windows::{
+    create_overlay_window, create_selection_button_window, create_tray_feedback_window,
+    show_settings_window,
+};
 
 pub fn run() {
     let _ = tracing_subscriber::fmt()
@@ -84,6 +90,7 @@ pub fn run() {
         .manage(coordinator)
         .manage(selection_button.clone())
         .manage(shutdown)
+        .manage(TrayFeedbackManager::default())
         .invoke_handler(tauri::generate_handler![
             commands::overlay_frontend_ready,
             commands::get_latest_capture,
@@ -94,6 +101,7 @@ pub fn run() {
             commands::retry_capture,
             commands::translate_detected_selection,
             commands::copy_translation,
+            commands::detect_active_local_model,
             commands::get_model_config,
             commands::get_model_api_key_status,
             commands::save_model_provider_config,
@@ -101,6 +109,7 @@ pub fn run() {
             commands::save_translation_preferences,
             commands::clear_model_api_key,
             commands::test_model_connection,
+            commands::open_provider_api_portal,
             commands::start_settings_dragging,
             commands::hide_settings_window,
             commands::minimize_settings_window
@@ -128,6 +137,8 @@ pub fn run() {
                 .map_err(|error| io::Error::other(format!("创建翻译浮层失败：{error}")))?;
             create_selection_button_window(app.handle())
                 .map_err(|error| io::Error::other(format!("创建划词翻译按钮失败：{error}")))?;
+            create_tray_feedback_window(app.handle())
+                .map_err(|error| io::Error::other(format!("创建托盘风格切换提示失败：{error}")))?;
             let config_store = ModelConfigStore::load(app.handle())
                 .map_err(|error| io::Error::other(format!("加载模型配置失败：{error}")))?;
             let credential_store = CredentialStore;

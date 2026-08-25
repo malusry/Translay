@@ -5,7 +5,7 @@
 
 Translay 是一款面向 Windows 的开源划词翻译工具。应用启动后驻留系统托盘；用户在其他应用中选中文字并按 `Ctrl+Shift+T`，Translay 会优先通过 Windows UI Automation 读取选区，必要时执行一次受控的 `Ctrl+C` 回退，然后在鼠标或选区附近显示不抢焦点的极简翻译浮层。
 
-当前版本为 0.3.0，支持 OpenAI-compatible 本地/API 模型配置与翻译调用；暂不包含 OCR、自动选区监控、历史记录或账户系统。
+当前版本为 0.4.0，支持 OpenAI-compatible 本地/API 模型配置与翻译调用；暂不包含 OCR、自动选区监控、历史记录或账户系统。
 
 ## 环境要求
 

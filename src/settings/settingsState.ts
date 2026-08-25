@@ -7,38 +7,96 @@ import type {
 
 export type ConnectionHealth = "idle" | "working" | "success" | "error";
 
-export type ProviderPreset =
-  | "ollama"
-  | "lm-studio"
-  | "deepseek"
-  | "glm"
-  | "custom";
+export const apiProviderPresets = [
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    baseUrl: "https://api.deepseek.com",
+    defaultModel: "deepseek-v4-flash",
+    apiKeyLabel: "DeepSeek API Key",
+  },
+  {
+    id: "openai",
+    label: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    defaultModel: "gpt-5.6-terra",
+    apiKeyLabel: "OpenAI API Key",
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic",
+    baseUrl: "https://api.anthropic.com/v1",
+    defaultModel: "claude-sonnet-5",
+    apiKeyLabel: "Anthropic API Key",
+  },
+  {
+    id: "zhipu",
+    label: "智谱 AI",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    defaultModel: "glm-5.2",
+    apiKeyLabel: "智谱 API Key",
+  },
+  {
+    id: "moonshot",
+    label: "月之暗面",
+    baseUrl: "https://api.moonshot.cn/v1",
+    defaultModel: "kimi-k2.6",
+    apiKeyLabel: "月之暗面 API Key",
+  },
+  {
+    id: "gemini",
+    label: "Google Gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    defaultModel: "gemini-3.6-flash",
+    apiKeyLabel: "Gemini API Key",
+  },
+] as const;
+
+export const localProviderPresets = [
+  {
+    id: "ollama",
+    label: "Ollama",
+    baseUrl: "http://127.0.0.1:11434/v1",
+  },
+  {
+    id: "lmstudio",
+    label: "LM Studio",
+    baseUrl: "http://127.0.0.1:1234/v1",
+  },
+  {
+    id: "jan",
+    label: "Jan",
+    baseUrl: "http://127.0.0.1:1337/v1",
+  },
+  {
+    id: "llamacpp",
+    label: "llama.cpp",
+    baseUrl: "http://127.0.0.1:8080/v1",
+  },
+  {
+    id: "vllm",
+    label: "vLLM",
+    baseUrl: "http://127.0.0.1:8000/v1",
+  },
+] as const;
+
+export type ApiProviderPreset = (typeof apiProviderPresets)[number]["id"];
+export type LocalProviderPreset =
+  (typeof localProviderPresets)[number]["id"];
+export type ProviderPortalPreset = ApiProviderPreset | LocalProviderPreset;
+export type ProviderPreset = ProviderPortalPreset | "custom";
 
 export type TranslationPreferences = Pick<
   ModelConfigView,
   "mode" | "reasoningEnabled"
 >;
 
-const providerPresetEndpoints = {
-  ollama: {
-    backend: "local",
-    baseUrl: "http://127.0.0.1:11434/v1",
-  },
-  "lm-studio": {
-    backend: "local",
-    baseUrl: "http://127.0.0.1:1234/v1",
-  },
-  deepseek: {
-    backend: "api",
-    baseUrl: "https://api.deepseek.com",
-    model: "deepseek-v4-flash",
-  },
-  glm: {
-    backend: "api",
-    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-    model: "glm-5.2",
-  },
-} as const;
+export type ReasoningSupport =
+  | "exact"
+  | "minimum"
+  | "fixed"
+  | "unavailable"
+  | "automatic";
 
 function normalizeEndpoint(value: string): string {
   return value.trim().toLowerCase().replace(/\/+$/, "");
@@ -49,36 +107,17 @@ export function providerPresetForConfig(
 ): ProviderPreset {
   const endpoint = normalizeEndpoint(config[config.backend].baseUrl);
 
-  if (config.backend === "local") {
+  const presets =
+    config.backend === "api" ? apiProviderPresets : localProviderPresets;
+  for (const preset of presets) {
+    const baseUrl = normalizeEndpoint(preset.baseUrl);
     if (
-      endpoint === normalizeEndpoint(providerPresetEndpoints.ollama.baseUrl) ||
-      endpoint === "http://localhost:11434/v1"
+      endpoint === baseUrl ||
+      endpoint === `${baseUrl}/chat/completions` ||
+      endpoint === `${baseUrl}/messages`
     ) {
-      return "ollama";
+      return preset.id;
     }
-    if (
-      endpoint ===
-        normalizeEndpoint(providerPresetEndpoints["lm-studio"].baseUrl) ||
-      endpoint === "http://localhost:1234/v1"
-    ) {
-      return "lm-studio";
-    }
-    return "custom";
-  }
-
-  if (
-    endpoint === normalizeEndpoint(providerPresetEndpoints.deepseek.baseUrl) ||
-    endpoint ===
-      `${normalizeEndpoint(providerPresetEndpoints.deepseek.baseUrl)}/chat/completions`
-  ) {
-    return "deepseek";
-  }
-  if (
-    endpoint === normalizeEndpoint(providerPresetEndpoints.glm.baseUrl) ||
-    endpoint ===
-      `${normalizeEndpoint(providerPresetEndpoints.glm.baseUrl)}/chat/completions`
-  ) {
-    return "glm";
   }
   return "custom";
 }
@@ -91,28 +130,64 @@ export function applyProviderPreset(
     return config;
   }
 
-  const next = providerPresetEndpoints[preset];
-  if (next.backend !== config.backend) {
+  const isApiPreset = apiProviderPresets.some(
+    (candidate) => candidate.id === preset,
+  );
+  if ((config.backend === "api") !== isApiPreset) {
     return config;
   }
 
-  if (next.backend === "local") {
+  if (config.backend === "local") {
+    const next = localProviderPresets.find(
+      (candidate) => candidate.id === preset,
+    )!;
+    const currentPreset = providerPresetForConfig(config);
+    const localModels = { ...config.localModels };
+    if (currentPreset !== "custom" && config.local.model.trim()) {
+      localModels[currentPreset] = config.local.model.trim();
+    }
+    const rememberedModel = localModels[preset]?.trim();
+
     return {
       ...config,
+      localModels,
       local: {
-        ...config.local,
         baseUrl: next.baseUrl,
+        model:
+          rememberedModel ||
+          (currentPreset === "custom" ? config.local.model : ""),
       },
     };
   }
 
+  const next = apiProviderPresets.find(
+    (candidate) => candidate.id === preset,
+  )!;
+  const currentPreset = providerPresetForConfig(config);
+  const apiModels = { ...config.apiModels };
+  if (currentPreset !== "custom" && config.api.model.trim()) {
+    apiModels[currentPreset] = config.api.model.trim();
+  }
+  const rememberedModel = apiModels[preset]?.trim();
+
   return {
     ...config,
+    apiModels,
     api: {
       baseUrl: next.baseUrl,
-      model: next.model,
+      model: rememberedModel || next.defaultModel,
     },
   };
+}
+
+export function apiKeyLabelForPreset(preset: ProviderPreset): string {
+  if (preset === "custom") {
+    return "API Key";
+  }
+  return (
+    apiProviderPresets.find((candidate) => candidate.id === preset)
+      ?.apiKeyLabel ?? "API Key"
+  );
 }
 
 export function applyTranslationPreferences(
@@ -153,6 +228,8 @@ export function applySavedProviderConfig(
     ...draft,
     mode: saved.mode,
     reasoningEnabled: saved.reasoningEnabled,
+    localModels: saved.localModels,
+    apiModels: saved.apiModels,
     [provider]: saved[provider],
     timeoutSeconds: saved.timeoutSeconds,
     hasApiKey: saved.hasApiKey,
@@ -196,12 +273,6 @@ export function draftSignature(input: SaveModelConfigInput): string {
   });
 }
 
-export function activationActionLabel(
-  backend: ModelConfigView["backend"],
-): string {
-  return backend === "api" ? "切换到 API" : "切换到本地模型";
-}
-
 export function connectionFeedbackMessage(
   result: ConnectionTestResult,
 ): string {
@@ -209,4 +280,176 @@ export function connectionFeedbackMessage(
     return `连接成功 · ${result.elapsedMs} ms`;
   }
   return result.message.trim() || "连接失败";
+}
+
+export function reasoningDescriptionForConfig(
+  config: ModelConfigView,
+): string {
+  const support = reasoningSupportForConfig(config);
+  if (support === "exact") {
+    return config.reasoningEnabled
+      ? "当前模型支持按开关启用思考"
+      : "当前模型已关闭思考，将优先快速响应";
+  }
+  if (support === "minimum") {
+    return config.reasoningEnabled
+      ? "当前模型已使用适中的思考强度"
+      : "该模型不能完全关闭，已降至最低思考";
+  }
+  if (support === "fixed") {
+    return "该模型固定启用思考，无法通过接口关闭";
+  }
+  if (support === "unavailable") {
+    return "该模型没有可用的思考控制，将保持默认行为";
+  }
+  return config.reasoningEnabled
+    ? "将自动匹配模型的思考能力"
+    : "将尝试关闭思考，不兼容时保持模型默认行为";
+}
+
+export function reasoningSupportForConfig(
+  config: ModelConfigView,
+): ReasoningSupport {
+  const endpoint = config[config.backend];
+  const model = endpoint.model.trim().toLowerCase();
+  const preset = providerPresetForConfig(config);
+
+  if (preset === "deepseek") {
+    return containsAny(model, ["deepseek-r1", "deepseek-reasoner"])
+      ? "fixed"
+      : "exact";
+  }
+  if (preset === "openai") {
+    if (model.includes("-pro")) {
+      return "fixed";
+    }
+    if (model.includes("gpt-oss")) {
+      return "minimum";
+    }
+    if (openAiSupportsNoReasoning(model)) {
+      return "exact";
+    }
+    if (isOpenAiReasoningModel(model)) {
+      return "minimum";
+    }
+    return "unavailable";
+  }
+  if (preset === "anthropic") {
+    return isClaudeThinkingModel(model) ? "exact" : "unavailable";
+  }
+  if (preset === "zhipu") {
+    return containsAny(model, [
+      "glm-4.5",
+      "glm-4.6",
+      "glm-4.7",
+      "glm-5",
+      "glm-6",
+      "glm-z1",
+    ])
+      ? "exact"
+      : "unavailable";
+  }
+  if (preset === "moonshot") {
+    if (containsAny(model, ["kimi-k2.5", "kimi-k2.6"])) {
+      return "exact";
+    }
+    if (model.includes("kimi-k3")) {
+      return "minimum";
+    }
+    if (model.includes("kimi-k2.7-code")) {
+      return "fixed";
+    }
+    return "unavailable";
+  }
+  if (preset === "gemini") {
+    if (model.includes("gemini-2.5") && !model.includes("pro")) {
+      return "exact";
+    }
+    if (
+      model.includes("gemini-2.5-pro") ||
+      modelMajorAtLeast(model, "gemini-", 3)
+    ) {
+      return "minimum";
+    }
+    return "unavailable";
+  }
+
+  if (isFixedReasoningModel(model)) {
+    return model.includes("deepseek-r1") || model.includes("kimi-k2.7-code")
+      ? "fixed"
+      : "minimum";
+  }
+  if (isRecognizedReasoningModel(model)) {
+    return "exact";
+  }
+  return config.backend === "local" ? "automatic" : "unavailable";
+}
+
+function openAiSupportsNoReasoning(model: string): boolean {
+  const match = /^gpt-5\.(\d+)/.exec(model);
+  return match !== null && Number(match[1]) >= 1;
+}
+
+function isOpenAiReasoningModel(model: string): boolean {
+  return /^(o1|o3|o4|gpt-5)/.test(model) || model.includes("gpt-oss");
+}
+
+function isClaudeThinkingModel(model: string): boolean {
+  return containsAny(model, [
+    "claude-3-7",
+    "claude-sonnet-4",
+    "claude-opus-4",
+    "claude-haiku-4",
+    "claude-sonnet-5",
+    "claude-opus-5",
+    "claude-haiku-5",
+  ]);
+}
+
+function isFixedReasoningModel(model: string): boolean {
+  return containsAny(model, [
+    "gpt-oss",
+    "deepseek-r1",
+    "deepseek-reasoner",
+    "kimi-k2.7-code",
+    "kimi-k3",
+    "command-a-reasoning",
+  ]);
+}
+
+function isRecognizedReasoningModel(model: string): boolean {
+  return (
+    isOpenAiReasoningModel(model) ||
+    containsAny(model, [
+      "qwen3",
+      "qwen-3",
+      "deepseek-v3.1",
+      "deepseek-v4",
+      "gemma-4",
+      "granite-3.2",
+      "nemotron",
+      "glm-4.5",
+      "glm-4.6",
+      "glm-4.7",
+      "glm-5",
+      "kimi-k2.5",
+      "kimi-k2.6",
+    ])
+  );
+}
+
+function modelMajorAtLeast(
+  model: string,
+  prefix: string,
+  minimum: number,
+): boolean {
+  if (!model.startsWith(prefix)) {
+    return false;
+  }
+  const major = Number(model.slice(prefix.length).split(/[.\-_]/)[0]);
+  return Number.isFinite(major) && major >= minimum;
+}
+
+function containsAny(value: string, candidates: string[]): boolean {
+  return candidates.some((candidate) => value.includes(candidate));
 }

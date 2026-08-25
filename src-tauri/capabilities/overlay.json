@@ -4,7 +4,8 @@
   "description": "Allows the local Translay overlay to receive capture events and call application commands.",
   "windows": [
     "overlay",
-    "selection-button"
+    "selection-button",
+    "tray-feedback"
   ],
   "permissions": [
     "core:event:allow-listen",

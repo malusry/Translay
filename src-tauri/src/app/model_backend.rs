@@ -60,6 +60,13 @@ pub(super) fn switch_model_backend(
     Ok(next)
 }
 
+pub(super) fn select_model_backend(
+    config: &ModelConfigStore,
+    backend: ModelBackend,
+) -> Result<ModelConfig, String> {
+    config.select_backend(backend)
+}
+
 pub(super) fn refresh_tray_model_switch(
     app: &tauri::AppHandle,
     config: &ModelConfigStore,

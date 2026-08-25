@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { ModelConfigView, SaveModelConfigInput } from "./modelSettings";
 import {
   activeModelSummary,
-  activationActionLabel,
+  apiKeyLabelForPreset,
+  apiProviderPresets,
   applyProviderPreset,
   applySavedProviderConfig,
   applyTranslationPreferences,
@@ -11,7 +12,10 @@ import {
   draftSignature,
   hasUnsavedProviderChanges,
   isEditingActiveConfiguration,
+  localProviderPresets,
   providerPresetForConfig,
+  reasoningDescriptionForConfig,
+  reasoningSupportForConfig,
 } from "./settingsState";
 
 const activeApi: ModelConfigView = {
@@ -26,12 +30,37 @@ const activeApi: ModelConfigView = {
     baseUrl: "https://api.deepseek.com/chat/completions",
     model: "deepseek-v4-flash",
   },
+  localModels: {},
+  apiModels: {
+    deepseek: "deepseek-v4-flash",
+  },
   timeoutSeconds: 60,
   hasApiKey: true,
   apiKeyHint: "sk-••••••••8F3A",
 };
 
 describe("settings state", () => {
+  it("offers only the six confirmed API quick presets", () => {
+    expect(apiProviderPresets.map((preset) => preset.label)).toEqual([
+      "DeepSeek",
+      "OpenAI",
+      "Anthropic",
+      "智谱 AI",
+      "月之暗面",
+      "Google Gemini",
+    ]);
+  });
+
+  it("offers the five confirmed local tool presets", () => {
+    expect(localProviderPresets.map((preset) => preset.label)).toEqual([
+      "Ollama",
+      "LM Studio",
+      "Jan",
+      "llama.cpp",
+      "vLLM",
+    ]);
+  });
+
   it("shows only the active model without repeating its provider", () => {
     expect(activeModelSummary(activeApi)).toBe("deepseek-v4-flash");
     expect(
@@ -42,11 +71,9 @@ describe("settings state", () => {
     ).toBe("未配置模型");
   });
 
-  it("keeps editing state separate from the active backend", () => {
+  it("recognizes whether the visible configuration is the active one", () => {
     const localDraft = { ...activeApi, backend: "local" as const };
     expect(isEditingActiveConfiguration(localDraft, activeApi)).toBe(false);
-    expect(activationActionLabel("local")).toBe("切换到本地模型");
-    expect(activationActionLabel("api")).toBe("切换到 API");
   });
 
   it("invalidates a tested draft after its active endpoint changes", () => {
@@ -129,17 +156,20 @@ describe("settings state", () => {
           model: "glm-5.2",
         },
       }),
-    ).toBe("glm");
+    ).toBe("zhipu");
     expect(
       providerPresetForConfig({
         ...activeApi,
-        backend: "local",
-        local: {
-          baseUrl: "http://localhost:11434/v1/",
-          model: "qwen3-14B",
+        api: {
+          baseUrl:
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+          model: "gemini-model",
         },
       }),
-    ).toBe("ollama");
+    ).toBe("gemini");
+    expect(
+      providerPresetForConfig({ ...activeApi, backend: "local" }),
+    ).toBe("lmstudio");
     expect(
       providerPresetForConfig({
         ...activeApi,
@@ -156,20 +186,64 @@ describe("settings state", () => {
       ...activeApi,
       backend: "local" as const,
     };
-    const lmStudio = applyProviderPreset(localDraft, "lm-studio");
-    expect(lmStudio.local).toEqual({
-      baseUrl: "http://127.0.0.1:1234/v1",
-      model: "qwen3-14B",
-    });
-    expect(lmStudio.api).toEqual(activeApi.api);
+    const ignored = applyProviderPreset(localDraft, "openai");
+    expect(ignored).toEqual(localDraft);
 
-    const glm = applyProviderPreset(activeApi, "glm");
-    expect(glm.api).toEqual({
+    const zhipu = applyProviderPreset(activeApi, "zhipu");
+    expect(zhipu.api).toEqual({
       baseUrl: "https://open.bigmodel.cn/api/paas/v4",
       model: "glm-5.2",
     });
-    expect(glm.local).toEqual(activeApi.local);
-    expect(hasUnsavedProviderChanges(glm, activeApi, "")).toBe(true);
+    expect(zhipu.local).toEqual(activeApi.local);
+    expect(hasUnsavedProviderChanges(zhipu, activeApi, "")).toBe(true);
+
+    const ollama = applyProviderPreset(localDraft, "ollama");
+    expect(ollama.local).toEqual({
+      baseUrl: "http://127.0.0.1:11434/v1",
+      model: "",
+    });
+    expect(ollama.localModels.lmstudio).toBe("qwen3-14B");
+  });
+
+  it("fills the official default model the first time a provider is used", () => {
+    const openai = applyProviderPreset(activeApi, "openai");
+    expect(openai.api).toEqual({
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-5.6-terra",
+    });
+    expect(apiKeyLabelForPreset("anthropic")).toBe("Anthropic API Key");
+    expect(apiKeyLabelForPreset("custom")).toBe("API Key");
+  });
+
+  it("remembers an editable model name independently for each provider", () => {
+    const openai = applyProviderPreset(activeApi, "openai");
+    const editedOpenAi = {
+      ...openai,
+      api: { ...openai.api, model: "my-openai-model" },
+    };
+
+    const deepseek = applyProviderPreset(editedOpenAi, "deepseek");
+    const openaiAgain = applyProviderPreset(deepseek, "openai");
+
+    expect(deepseek.api.model).toBe("deepseek-v4-flash");
+    expect(deepseek.apiModels.openai).toBe("my-openai-model");
+    expect(openaiAgain.api.model).toBe("my-openai-model");
+  });
+
+  it("remembers an editable model name independently for each local tool", () => {
+    const localDraft = { ...activeApi, backend: "local" as const };
+    const ollama = applyProviderPreset(localDraft, "ollama");
+    const editedOllama = {
+      ...ollama,
+      local: { ...ollama.local, model: "qwen3:8b" },
+    };
+
+    const jan = applyProviderPreset(editedOllama, "jan");
+    const ollamaAgain = applyProviderPreset(jan, "ollama");
+
+    expect(jan.local.model).toBe("");
+    expect(jan.localModels.ollama).toBe("qwen3:8b");
+    expect(ollamaAgain.local.model).toBe("qwen3:8b");
   });
 
   it("keeps connection feedback concise beside the test action", () => {
@@ -187,5 +261,61 @@ describe("settings state", () => {
         elapsedMs: 60_000,
       }),
     ).toBe("连接超时");
+  });
+
+  it("describes exact, minimum and fixed reasoning behavior honestly", () => {
+    expect(reasoningSupportForConfig(activeApi)).toBe("exact");
+    expect(reasoningDescriptionForConfig(activeApi)).toBe(
+      "当前模型已关闭思考，将优先快速响应",
+    );
+
+    const gemini = {
+      ...activeApi,
+      api: {
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+        model: "gemini-3.6-flash",
+      },
+    };
+    expect(reasoningSupportForConfig(gemini)).toBe("minimum");
+    expect(reasoningDescriptionForConfig(gemini)).toBe(
+      "该模型不能完全关闭，已降至最低思考",
+    );
+
+    const openAiPro = {
+      ...activeApi,
+      api: {
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-5.6-pro",
+      },
+    };
+    expect(reasoningSupportForConfig(openAiPro)).toBe("fixed");
+
+    const localR1 = {
+      ...activeApi,
+      backend: "local" as const,
+      local: {
+        baseUrl: "http://127.0.0.1:1234/v1",
+        model: "deepseek-r1-distill-qwen-32b",
+      },
+    };
+    expect(reasoningSupportForConfig(localR1)).toBe("fixed");
+    expect(reasoningDescriptionForConfig(localR1)).toBe(
+      "该模型固定启用思考，无法通过接口关闭",
+    );
+  });
+
+  it("uses automatic safe fallback for unknown local models", () => {
+    const unknownLocal = {
+      ...activeApi,
+      backend: "local" as const,
+      local: {
+        baseUrl: "http://127.0.0.1:9000/v1",
+        model: "my-future-local-model",
+      },
+    };
+    expect(reasoningSupportForConfig(unknownLocal)).toBe("automatic");
+    expect(reasoningDescriptionForConfig(unknownLocal)).toBe(
+      "将尝试关闭思考，不兼容时保持模型默认行为",
+    );
   });
 });

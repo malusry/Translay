@@ -15,7 +15,8 @@ import type {
 } from "./modelSettings";
 import {
   activeModelSummary,
-  activationActionLabel,
+  apiKeyLabelForPreset,
+  apiProviderPresets,
   applyProviderPreset,
   applySavedProviderConfig,
   applyTranslationPreferences,
@@ -23,19 +24,25 @@ import {
   draftSignature,
   hasUnsavedProviderChanges,
   isEditingActiveConfiguration,
+  localProviderPresets,
   providerPresetForConfig,
+  reasoningDescriptionForConfig,
   type ConnectionHealth,
+  type LocalProviderPreset,
+  type ProviderPortalPreset,
   type ProviderPreset,
   type TranslationPreferences,
 } from "./settingsState";
 import {
   activateModelBackend,
   clearModelApiKey,
+  detectActiveLocalModel,
   getModelApiKeyStatus,
   getModelConfig,
   hideSettingsWindow,
   minimizeSettingsWindow,
   onModelBackendChanged,
+  openProviderApiPortal,
   saveModelProviderConfig,
   saveTranslationPreferences as saveTranslationPreferencesToBackend,
   startSettingsDragging,
@@ -60,6 +67,8 @@ const initialConfig: ModelConfigView = {
     baseUrl: "https://api.openai.com/v1",
     model: "",
   },
+  localModels: {},
+  apiModels: {},
   timeoutSeconds: 60,
   hasApiKey: false,
   apiKeyHint: null,
@@ -78,7 +87,9 @@ export function Settings() {
   const [saveConfirmed, setSaveConfirmed] = useState(false);
   const translationSaveInFlight = useRef(false);
   const saveFeedbackTimer = useRef<number | null>(null);
+  const statusFeedbackTimer = useRef<number | null>(null);
   const apiKeyStatusRequest = useRef(0);
+  const localModelDetectionRequest = useRef(0);
   const [activeHealth, setActiveHealth] =
     useState<ConnectionHealth>("idle");
   const [testedDraft, setTestedDraft] = useState<{
@@ -122,6 +133,10 @@ export function Settings() {
       setConfig((current) => ({
         ...current,
         backend: payload.backend,
+        mode: payload.mode,
+        reasoningEnabled: payload.reasoningEnabled,
+        localModels: payload.localModels,
+        apiModels: payload.apiModels,
         hasApiKey: payload.hasApiKey,
         apiKeyHint: payload.apiKeyHint,
       }));
@@ -165,6 +180,9 @@ export function Settings() {
       if (saveFeedbackTimer.current !== null) {
         window.clearTimeout(saveFeedbackTimer.current);
       }
+      if (statusFeedbackTimer.current !== null) {
+        window.clearTimeout(statusFeedbackTimer.current);
+      }
     },
     [],
   );
@@ -198,14 +216,69 @@ export function Settings() {
     }
   }, []);
 
-  const setBackend = (backend: ModelBackend) => {
-    setConfig((current) => ({ ...current, backend }));
+  const setBackend = async (backend: ModelBackend) => {
+    if (
+      !loaded ||
+      activeConfig === null ||
+      backend === config.backend ||
+      modelSaving ||
+      modelSwitching ||
+      translationSaving
+    ) {
+      return;
+    }
+    localModelDetectionRequest.current += 1;
+    const discardingUnsavedChanges = hasUnsavedProviderChanges(
+      config,
+      activeConfig,
+      apiKey,
+    );
+
+    setModelSwitching(true);
+    setStatus({ kind: "working", message: "正在切换模型来源…" });
+    try {
+      const next = await activateModelBackend(backend);
+      setActiveConfig(next);
+      setConfig((current) => ({
+        ...current,
+        backend: next.backend,
+        mode: next.mode,
+        reasoningEnabled: next.reasoningEnabled,
+        local: next.local,
+        api: next.api,
+        localModels: next.localModels,
+        apiModels: next.apiModels,
+        timeoutSeconds: next.timeoutSeconds,
+        hasApiKey: next.hasApiKey,
+        apiKeyHint: next.apiKeyHint,
+      }));
+      setActiveHealth("idle");
+      setTestedDraft(null);
+      setConnectionStatus({ kind: "idle", message: "" });
+      setSaveConfirmed(false);
+      const sourceName = backend === "local" ? "本地模型" : "API";
+      const message = discardingUnsavedChanges
+        ? `已切换至${sourceName}，未保存的修改未应用`
+        : `已切换至${sourceName}`;
+      setStatus({ kind: "success", message });
+      if (statusFeedbackTimer.current !== null) {
+        window.clearTimeout(statusFeedbackTimer.current);
+      }
+      statusFeedbackTimer.current = window.setTimeout(() => {
+        setStatus((current) =>
+          current.message === message
+            ? { kind: "idle", message: "" }
+            : current,
+        );
+        statusFeedbackTimer.current = null;
+      }, 1800);
+    } catch (error) {
+      setStatus({ kind: "error", message: String(error) });
+    } finally {
+      setModelSwitching(false);
+    }
     setApiKey("");
     setEditingApiKey(false);
-    setTestedDraft(null);
-    setConnectionStatus({ kind: "idle", message: "" });
-    setSaveConfirmed(false);
-    setStatus({ kind: "idle", message: "" });
   };
 
   const saveTranslationPreferences = async (
@@ -267,6 +340,9 @@ export function Settings() {
     field: "baseUrl" | "model",
     value: string,
   ) => {
+    if (target === "local") {
+      localModelDetectionRequest.current += 1;
+    }
     const apiAddressChanged = target === "api" && field === "baseUrl";
     if (apiAddressChanged) {
       apiKeyStatusRequest.current += 1;
@@ -288,6 +364,7 @@ export function Settings() {
   };
 
   const setProviderPreset = (preset: ProviderPreset) => {
+    const detectionRequest = ++localModelDetectionRequest.current;
     const next = applyProviderPreset(config, preset);
     const apiAddressChanged =
       next.backend === "api" &&
@@ -307,6 +384,60 @@ export function Settings() {
     setConnectionStatus({ kind: "idle", message: "" });
     setSaveConfirmed(false);
     setStatus({ kind: "idle", message: "" });
+
+    if (next.backend === "local" && preset !== "custom") {
+      const localPreset = preset as LocalProviderPreset;
+      void detectActiveLocalModel(localPreset, next.local.baseUrl).then(
+        (model) => {
+          if (!model || detectionRequest !== localModelDetectionRequest.current) {
+            return;
+          }
+          setConfig((current) => {
+            if (
+              current.backend !== "local" ||
+              current.local.baseUrl.trim() !== next.local.baseUrl.trim()
+            ) {
+              return current;
+            }
+            return {
+              ...current,
+              local: { ...current.local, model },
+              localModels: { ...current.localModels, [localPreset]: model },
+            };
+          });
+        },
+        () => {},
+      );
+    }
+  };
+
+  const openProviderPortal = async (preset: ProviderPortalPreset) => {
+    const provider = [...apiProviderPresets, ...localProviderPresets].find(
+      (candidate) => candidate.id === preset,
+    )!;
+    const isApiProvider = apiProviderPresets.some(
+      (candidate) => candidate.id === preset,
+    );
+    const message = `已在默认浏览器打开 ${provider.label}${
+      isApiProvider ? " API 平台" : " 配置文档"
+    }`;
+    try {
+      await openProviderApiPortal(preset);
+      setStatus({ kind: "success", message });
+      if (statusFeedbackTimer.current !== null) {
+        window.clearTimeout(statusFeedbackTimer.current);
+      }
+      statusFeedbackTimer.current = window.setTimeout(() => {
+        setStatus((current) =>
+          current.message === message
+            ? { kind: "idle", message: "" }
+            : current,
+        );
+        statusFeedbackTimer.current = null;
+      }, 1800);
+    } catch (error) {
+      setStatus({ kind: "error", message: String(error) });
+    }
   };
 
   const buildInput = (): SaveModelConfigInput => ({
@@ -327,7 +458,7 @@ export function Settings() {
     saveFeedbackTimer.current = window.setTimeout(() => {
       setSaveConfirmed(false);
       saveFeedbackTimer.current = null;
-    }, 900);
+    }, 1500);
   };
 
   const handleSave = async (event: FormEvent) => {
@@ -433,44 +564,6 @@ export function Settings() {
     }
   };
 
-  const activateBackend = async () => {
-    if (
-      !loaded ||
-      activeConfig === null ||
-      config.backend === activeConfig.backend ||
-      hasUnsavedProviderChanges(config, activeConfig, apiKey) ||
-      modelSaving ||
-      modelSwitching ||
-      translationSaving
-    ) {
-      return;
-    }
-
-    const backend = config.backend;
-    const signature = draftSignature(buildInput());
-    setModelSwitching(true);
-    setStatus({ kind: "working", message: "正在切换…" });
-    try {
-      const next = await activateModelBackend(backend);
-      setActiveConfig(next);
-      setConfig((current) => ({
-        ...current,
-        mode: next.mode,
-        reasoningEnabled: next.reasoningEnabled,
-        hasApiKey: next.hasApiKey,
-        apiKeyHint: next.apiKeyHint,
-      }));
-      setActiveHealth(
-        testedDraft?.signature === signature ? testedDraft.health : "idle",
-      );
-      setStatus({ kind: "idle", message: "" });
-    } catch (error) {
-      setStatus({ kind: "error", message: String(error) });
-    } finally {
-      setModelSwitching(false);
-    }
-  };
-
   const close = () => {
     setApiKey("");
     setEditingApiKey(false);
@@ -514,12 +607,7 @@ export function Settings() {
   };
 
   const providerPreset = providerPresetForConfig(config);
-  const apiKeyLabel =
-    providerPreset === "deepseek"
-      ? "DeepSeek Key"
-      : providerPreset === "glm"
-        ? "GLM Key"
-        : "API Key";
+  const apiKeyLabel = apiKeyLabelForPreset(providerPreset);
   const activeSummary = activeConfig
     ? activeModelSummary(activeConfig)
     : "模型配置加载中";
@@ -528,9 +616,11 @@ export function Settings() {
     activeConfig,
     apiKey,
   );
-  const viewingActiveBackend =
-    activeConfig !== null && config.backend === activeConfig.backend;
-  const switchLabel = activationActionLabel(config.backend);
+  const reasoningDescription = reasoningDescriptionForConfig(
+    activeConfig
+      ? { ...activeConfig, reasoningEnabled: config.reasoningEnabled }
+      : config,
+  );
 
   return (
     <SettingsView
@@ -538,15 +628,13 @@ export function Settings() {
       config={config}
       activeHealth={activeHealth}
       activeSummary={activeSummary}
+      reasoningDescription={reasoningDescription}
       loaded={loaded}
       translationSaving={translationSaving}
       modelSaving={modelSaving}
       modelSwitching={modelSwitching}
       saveConfirmed={saveConfirmed}
       providerDirty={providerDirty}
-      viewingActiveBackend={viewingActiveBackend}
-      switchLabel={switchLabel}
-      providerPreset={providerPreset}
       apiKeyLabel={apiKeyLabel}
       apiKey={apiKey}
       editingApiKey={editingApiKey}
@@ -564,8 +652,9 @@ export function Settings() {
           reasoningEnabled: !config.reasoningEnabled,
         })
       }
-      onSelectBackend={setBackend}
+      onSelectBackend={(backend) => void setBackend(backend)}
       onSelectProviderPreset={setProviderPreset}
+      onOpenProviderPortal={(preset) => void openProviderPortal(preset)}
       onSetEndpoint={setEndpoint}
       onRefreshApiKeyStatus={(baseUrl) => void refreshApiKeyStatus(baseUrl)}
       onBeginApiKeyEdit={beginApiKeyEdit}
@@ -574,7 +663,6 @@ export function Settings() {
       onSetTimeoutSeconds={setTimeoutSeconds}
       onTestConnection={() => void handleTest()}
       onClearApiKey={() => void clearApiKey()}
-      onActivateBackend={() => void activateBackend()}
     />
   );
 }

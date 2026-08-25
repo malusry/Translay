@@ -7,8 +7,14 @@ import type {
 } from "./modelSettings";
 import type {
   ConnectionHealth,
+  ProviderPortalPreset,
   ProviderPreset,
 } from "./settingsState";
+import {
+  apiProviderPresets,
+  localProviderPresets,
+} from "./settingsState";
+import translayWordmark from "../../assets/icon-concepts/translay-desktop-v3/translay-wordmark-flowline.svg";
 
 export type SettingsSection = "translation" | "model";
 
@@ -22,15 +28,13 @@ interface SettingsViewProps {
   config: ModelConfigView;
   activeHealth: ConnectionHealth;
   activeSummary: string;
+  reasoningDescription: string;
   loaded: boolean;
   translationSaving: boolean;
   modelSaving: boolean;
   modelSwitching: boolean;
   saveConfirmed: boolean;
   providerDirty: boolean;
-  viewingActiveBackend: boolean;
-  switchLabel: string;
-  providerPreset: ProviderPreset;
   apiKeyLabel: string;
   apiKey: string;
   editingApiKey: boolean;
@@ -45,6 +49,7 @@ interface SettingsViewProps {
   onToggleReasoning: () => void;
   onSelectBackend: (backend: ModelBackend) => void;
   onSelectProviderPreset: (preset: ProviderPreset) => void;
+  onOpenProviderPortal: (preset: ProviderPortalPreset) => void;
   onSetEndpoint: (
     backend: ModelBackend,
     field: "baseUrl" | "model",
@@ -57,19 +62,15 @@ interface SettingsViewProps {
   onSetTimeoutSeconds: (seconds: number) => void;
   onTestConnection: () => void;
   onClearApiKey: () => void;
-  onActivateBackend: () => void;
 }
 
-function SaveIcon({ confirmed }: { confirmed: boolean }) {
+function SaveStatusIcon({ saving }: { saving: boolean }) {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true">
-      {confirmed ? (
-        <path d="m4.5 10.4 3.4 3.4 7.6-7.6" />
+      {saving ? (
+        <circle className="save-button-spinner" cx="10" cy="10" r="5.6" />
       ) : (
-        <>
-          <path d="M4 3.5h9.4L16 6.1v10.4H4z" />
-          <path d="M6.4 3.5v4.1h6.7V3.5M6.4 16.5v-5.2h7.2v5.2" />
-        </>
+        <path d="m4.5 10.4 3.4 3.4 7.6-7.6" />
       )}
     </svg>
   );
@@ -79,23 +80,23 @@ function ConnectionIcon({ health }: { health: ConnectionHealth }) {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true">
       {health === "working" ? (
-        <g className="connection-test-dots">
-          <circle cx="5.5" cy="10" r="1.35" />
-          <circle cx="10" cy="10" r="1.35" />
-          <circle cx="14.5" cy="10" r="1.35" />
-        </g>
+        <circle className="connection-test-spinner" cx="10" cy="10" r="5.6" />
       ) : health === "success" ? (
-        <path d="m4.6 10.4 3.4 3.4 7.5-7.5" />
+        <>
+          <circle cx="10" cy="10" r="6.2" />
+          <path d="m6.8 10.2 2.1 2.1 4.5-4.6" />
+        </>
       ) : health === "error" ? (
         <>
-          <path d="m6 6 8 8" />
-          <path d="m14 6-8 8" />
+          <circle cx="10" cy="10" r="6.2" />
+          <path d="M10 6.7v4.2" />
+          <path d="M10 13.7h.01" />
         </>
       ) : (
         <>
-          <path d="M6.8 3.6v3.2M13.2 3.6v3.2" />
-          <path d="M5.2 6.8h9.6v1.5a4.8 4.8 0 0 1-9.6 0z" />
-          <path d="M10 13.1v3.3" />
+          <path d="m8.1 12.8-1.2 1.3a3.1 3.1 0 0 1-4.4-4.4l2.4-2.4a3.1 3.1 0 0 1 4.4 0" />
+          <path d="m11.9 7.2 1.2-1.3a3.1 3.1 0 0 1 4.4 4.4l-2.4 2.4a3.1 3.1 0 0 1-4.4 0" />
+          <path d="m7.4 12.6 5.2-5.2" />
         </>
       )}
     </svg>
@@ -107,15 +108,13 @@ export function SettingsView({
   config,
   activeHealth,
   activeSummary,
+  reasoningDescription,
   loaded,
   translationSaving,
   modelSaving,
   modelSwitching,
   saveConfirmed,
   providerDirty,
-  viewingActiveBackend,
-  switchLabel,
-  providerPreset,
   apiKeyLabel,
   apiKey,
   editingApiKey,
@@ -130,6 +129,7 @@ export function SettingsView({
   onToggleReasoning,
   onSelectBackend,
   onSelectProviderPreset,
+  onOpenProviderPortal,
   onSetEndpoint,
   onRefreshApiKeyStatus,
   onBeginApiKeyEdit,
@@ -138,7 +138,6 @@ export function SettingsView({
   onSetTimeoutSeconds,
   onTestConnection,
   onClearApiKey,
-  onActivateBackend,
 }: SettingsViewProps) {
   const endpoint = config[config.backend];
 
@@ -150,10 +149,12 @@ export function SettingsView({
         onMouseDown={onWindowMouseDown}
       >
         <div className="sidebar-brand" data-tauri-drag-region>
-          <span className="brand-mark" aria-hidden="true">
-            T
-          </span>
-          <span data-tauri-drag-region>Translay</span>
+          <img
+            className="brand-wordmark"
+            src={translayWordmark}
+            alt="Translay"
+            data-tauri-drag-region
+          />
         </div>
         <nav className="settings-nav" aria-label="设置分类">
           <button
@@ -270,7 +271,7 @@ export function SettingsView({
                 <div className="setting-line reasoning-row">
                   <div>
                     <strong>模型思考</strong>
-                    <small>开启后允许模型推理，关闭时优先快速响应</small>
+                    <small>{reasoningDescription}</small>
                   </div>
                   <button
                     className={`switch-button ${
@@ -292,54 +293,106 @@ export function SettingsView({
                 <div className="model-toolbar">
                   <div>
                     <h2 id="model-source-label">模型来源</h2>
-                    <p>选择本地服务或在线 API</p>
+                    <p>选择后立即切换当前模型来源</p>
                   </div>
-                  <div className="source-tabs" aria-label="模型来源">
+                  <div
+                    className={`source-tabs ${config.backend} ${
+                      modelSwitching ? "switching" : ""
+                    }`}
+                    aria-label={`当前正在使用${
+                      config.backend === "local" ? "本地模型" : "在线 API"
+                    }`}
+                    aria-busy={modelSwitching}
+                  >
                     <button
                       type="button"
                       className={config.backend === "local" ? "active" : ""}
+                      aria-pressed={config.backend === "local"}
+                      aria-label={
+                        config.backend === "local"
+                          ? "当前正在使用本地模型"
+                          : "切换到本地模型"
+                      }
+                      title={
+                        providerDirty && config.backend !== "local"
+                          ? "切换到本地模型；当前未保存的修改不会应用"
+                          : undefined
+                      }
+                      disabled={
+                        !loaded ||
+                        modelSaving ||
+                        modelSwitching ||
+                        translationSaving
+                      }
                       onClick={() => onSelectBackend("local")}
                     >
+                      <span className="source-mode-dot" aria-hidden="true" />
                       本地
                     </button>
                     <button
                       type="button"
                       className={config.backend === "api" ? "active" : ""}
+                      aria-pressed={config.backend === "api"}
+                      aria-label={
+                        config.backend === "api"
+                          ? "当前正在使用在线 API"
+                          : "切换到在线 API"
+                      }
+                      title={
+                        providerDirty && config.backend !== "api"
+                          ? "切换到在线 API；当前未保存的修改不会应用"
+                          : undefined
+                      }
+                      disabled={
+                        !loaded ||
+                        modelSaving ||
+                        modelSwitching ||
+                        translationSaving
+                      }
                       onClick={() => onSelectBackend("api")}
                     >
+                      <span className="source-mode-dot" aria-hidden="true" />
                       API
                     </button>
                   </div>
                 </div>
 
                 <div className="form-rows">
-                  <div className="form-row preset-select-row">
-                    <label htmlFor="provider-preset">服务预设</label>
-                    <div className="select-control">
-                      <select
-                        id="provider-preset"
-                        value={providerPreset}
-                        onChange={(event) =>
-                          onSelectProviderPreset(
-                            event.target.value as ProviderPreset,
-                          )
-                        }
+                  <div className="form-row provider-preset-row">
+                    <span className="row-label">快速配置</span>
+                    <div className="provider-preset-content">
+                      <div
+                        className="provider-preset-list"
+                        aria-label="快速切换模型服务配置"
                       >
-                        {config.backend === "local" ? (
-                          <>
-                            <option value="ollama">Ollama</option>
-                            <option value="lm-studio">LM Studio</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="deepseek">DeepSeek</option>
-                            <option value="glm">GLM</option>
-                          </>
-                        )}
-                        {providerPreset === "custom" && (
-                          <option value="custom">自定义</option>
-                        )}
-                      </select>
+                        {(config.backend === "api"
+                          ? apiProviderPresets
+                          : localProviderPresets
+                        ).map((preset) => {
+                          const portalName =
+                            config.backend === "api"
+                              ? "官方 API 平台"
+                              : "官方配置文档";
+                          return (
+                            <button
+                              key={preset.id}
+                              className={`provider-preset provider-${preset.id}`}
+                              type="button"
+                              onClick={() =>
+                                onSelectProviderPreset(preset.id)
+                              }
+                              onContextMenu={(event) => {
+                                event.preventDefault();
+                                onOpenProviderPortal(preset.id);
+                              }}
+                              aria-label={`${preset.label}：左键应用预设，右键打开${portalName}`}
+                              title={`左键应用 ${preset.label} 预设 · 右键打开${portalName}`}
+                            >
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
@@ -483,7 +536,13 @@ export function SettingsView({
                   </button>
                   <button
                     className={`provider-save-button ${
-                      saveConfirmed ? "confirmed" : ""
+                      modelSaving
+                        ? "saving"
+                        : saveConfirmed
+                          ? "confirmed"
+                          : providerDirty
+                            ? "dirty"
+                            : "idle"
                     }`}
                     type="submit"
                     disabled={
@@ -493,17 +552,31 @@ export function SettingsView({
                       modelSwitching ||
                       translationSaving
                     }
-                    aria-label={saveConfirmed ? "已保存" : "保存当前配置"}
+                    aria-label={
+                      modelSaving
+                        ? "正在保存当前配置"
+                        : saveConfirmed
+                          ? "当前配置已保存"
+                          : "保存当前配置"
+                    }
                   >
-                    <SaveIcon confirmed={saveConfirmed} />
-                    <span>保存</span>
+                    {(modelSaving || saveConfirmed) && (
+                      <SaveStatusIcon saving={modelSaving} />
+                    )}
+                    <span>
+                      {modelSaving ? "保存中" : saveConfirmed ? "已保存" : "保存"}
+                    </span>
                   </button>
                 </div>
               </div>
             )}
           </div>
 
-          {(section === "model" || status.kind === "error") && (
+          {(status.kind !== "idle" ||
+            (section === "model" &&
+              config.backend === "api" &&
+              config.hasApiKey &&
+              editingApiKey)) && (
             <footer className="settings-footer">
               <div className={`settings-status ${status.kind}`} role="status">
                 <span>{status.message}</span>
@@ -516,32 +589,6 @@ export function SettingsView({
                     </button>
                   )}
               </div>
-              {section === "model" && (
-                <div className="settings-actions">
-                  {viewingActiveBackend ? (
-                    <span className="active-provider-note">
-                      <span aria-hidden="true" />
-                      当前正在使用
-                    </span>
-                  ) : (
-                    <button
-                      className="primary switch-provider-button"
-                      type="button"
-                      onClick={onActivateBackend}
-                      disabled={
-                        !loaded ||
-                        providerDirty ||
-                        modelSaving ||
-                        modelSwitching ||
-                        translationSaving
-                      }
-                      title={providerDirty ? "请先保存当前配置" : undefined}
-                    >
-                      {modelSwitching ? "正在切换…" : switchLabel}
-                    </button>
-                  )}
-                </div>
-              )}
             </footer>
           )}
         </form>

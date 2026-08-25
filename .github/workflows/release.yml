@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: translay-v0.3.0-release
+  group: translay-v0.4.0-release
   cancel-in-progress: false
 
 jobs:
@@ -44,10 +44,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v0.3.0
-          releaseName: "Translay v0.3.0"
+          tagName: v0.4.0
+          releaseName: "Translay v0.4.0"
           releaseBody: |
-            Translay v0.3.0 Windows 正式版。
+            Translay v0.4.0 Windows 正式版。
+
+            本次更新：
+            - 全新模型设置界面与 Translay 品牌字标
+            - 新增 DeepSeek、OpenAI、Anthropic、智谱 AI、月之暗面和 Gemini API 快速配置
+            - 新增 Ollama、LM Studio、Jan、llama.cpp 和 vLLM 本地服务快速配置与活动模型检测
+            - 分服务记忆模型名称，切换模型来源时保留各自配置
+            - 扩展多供应商模型思考控制，并为不兼容接口提供安全回退
+            - 新增 Anthropic Messages API 原生调用支持
+            - 左键托盘图标可快速切换口语/学术风格，并显示轻量反馈与当前模型提示
 
             主要功能：
             - 选中文字后显示轻量翻译按钮，点击即可翻译

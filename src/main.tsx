@@ -24,6 +24,12 @@ async function renderSelectedView() {
     return;
   }
 
+  if (selectedView === "tray-feedback") {
+    const { TrayFeedback } = await import("./tray-feedback/TrayFeedback");
+    root.render(<TrayFeedback />);
+    return;
+  }
+
   const { Overlay } = await import("./overlay/Overlay");
   root.render(
     <React.StrictMode>

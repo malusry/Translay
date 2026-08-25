@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 use crate::{
     credential_store::CredentialStore,
     model_config::{EndpointConfig, ModelBackend, ModelConfig, ModelConfigStore, validate_config},
+    reasoning::{
+        AnthropicThinkingControl, OpenAiReasoningPolicy, ThinkingControl,
+        anthropic_reasoning_policy, openai_reasoning_policy,
+    },
     translation::{TranslationMode, TranslationRequest},
 };
 
@@ -102,37 +106,51 @@ impl TranslationService {
     ) -> Result<String, String> {
         validate_config(config)?;
         let endpoint = active_endpoint(config);
-        let thinking = apply_reasoning_policy(config, endpoint, &mut messages);
-        let url = chat_completions_url(&endpoint.base_url)?;
-        let mut request = self
-            .client
-            .post(url)
-            .timeout(Duration::from_secs(config.timeout_seconds))
-            .json(&ChatCompletionRequest {
-                model: endpoint.model.trim(),
-                messages,
-                stream: false,
-                thinking,
-            });
+        let api_key = if config.backend == ModelBackend::Api {
+            Some(
+                api_key_override
+                    .filter(|value| !value.trim().is_empty())
+                    .map(str::to_owned)
+                    .or(self.credentials.read_api_key(&endpoint.base_url)?)
+                    .ok_or_else(|| "尚未保存 API Key，请打开“配置”中的模型页面".to_owned())?,
+            )
+        } else {
+            None
+        };
 
-        if config.backend == ModelBackend::Api {
-            let api_key = api_key_override
-                .filter(|value| !value.trim().is_empty())
-                .map(str::to_owned)
-                .or(self.credentials.read_api_key(&endpoint.base_url)?)
+        if is_anthropic_api(config, endpoint) {
+            let api_key = api_key
+                .as_deref()
                 .ok_or_else(|| "尚未保存 API Key，请打开“配置”中的模型页面".to_owned())?;
-            request = request.bearer_auth(api_key);
+            return self
+                .send_anthropic_messages(config, endpoint, messages, api_key)
+                .await;
         }
 
-        let response = request
-            .send()
-            .await
-            .map_err(|error| request_error_message(error, config.backend))?;
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .map_err(|error| format!("读取模型响应失败：{error}"))?;
+        let reasoning = apply_reasoning_policy(config, endpoint, &mut messages);
+        let url = chat_completions_url(&endpoint.base_url)?;
+        let (mut status, mut body) = self
+            .post_chat_completion(
+                config,
+                endpoint,
+                url.clone(),
+                &messages,
+                api_key.as_deref(),
+                reasoning,
+            )
+            .await?;
+        if reasoning.has_request_control() && should_retry_without_reasoning(status, &body) {
+            (status, body) = self
+                .post_chat_completion(
+                    config,
+                    endpoint,
+                    url,
+                    &messages,
+                    api_key.as_deref(),
+                    reasoning.without_request_control(),
+                )
+                .await?;
+        }
         if !status.is_success() {
             return Err(http_error_message(status, &body));
         }
@@ -155,6 +173,139 @@ impl TranslationService {
             .next()
             .and_then(|choice| choice.message.content)
             .ok_or_else(|| "模型响应中没有可用文本".to_owned())
+    }
+
+    async fn post_chat_completion(
+        &self,
+        config: &ModelConfig,
+        endpoint: &EndpointConfig,
+        url: Url,
+        messages: &[ChatMessage],
+        api_key: Option<&str>,
+        reasoning: OpenAiReasoningPolicy,
+    ) -> Result<(StatusCode, String), String> {
+        let mut request = self
+            .client
+            .post(url)
+            .timeout(Duration::from_secs(config.timeout_seconds))
+            .json(&ChatCompletionRequest {
+                model: endpoint.model.trim(),
+                messages,
+                stream: false,
+                thinking: reasoning.thinking,
+                reasoning_effort: reasoning.reasoning_effort,
+            });
+        if let Some(api_key) = api_key {
+            request = request.bearer_auth(api_key);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| request_error_message(error, config.backend))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|error| format!("读取模型响应失败：{error}"))?;
+        Ok((status, body))
+    }
+
+    async fn send_anthropic_messages(
+        &self,
+        config: &ModelConfig,
+        endpoint: &EndpointConfig,
+        messages: Vec<ChatMessage>,
+        api_key: &str,
+    ) -> Result<String, String> {
+        let system = messages
+            .iter()
+            .filter(|message| message.role == "system")
+            .map(|message| message.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let messages = messages
+            .into_iter()
+            .filter(|message| message.role != "system")
+            .collect::<Vec<_>>();
+        let url = anthropic_messages_url(&endpoint.base_url)?;
+        let thinking = anthropic_reasoning_policy(&endpoint.model, config.reasoning_enabled);
+        let (mut status, mut body) = self
+            .post_anthropic_messages(
+                config,
+                endpoint,
+                url.clone(),
+                &messages,
+                (!system.is_empty()).then_some(system.as_str()),
+                api_key,
+                thinking,
+            )
+            .await?;
+        if thinking.is_some() && should_retry_without_reasoning(status, &body) {
+            (status, body) = self
+                .post_anthropic_messages(
+                    config,
+                    endpoint,
+                    url,
+                    &messages,
+                    (!system.is_empty()).then_some(system.as_str()),
+                    api_key,
+                    None,
+                )
+                .await?;
+        }
+        if !status.is_success() {
+            return Err(http_error_message(status, &body));
+        }
+        let completion: AnthropicMessageResponse = serde_json::from_str(&body)
+            .map_err(|_| "Anthropic 响应缺少 content 文本，请检查模型名称与服务地址".to_owned())?;
+        let output = completion
+            .content
+            .into_iter()
+            .filter(|block| block.kind == "text")
+            .filter_map(|block| block.text)
+            .collect::<Vec<_>>()
+            .join("");
+        if output.trim().is_empty() {
+            Err("模型响应中没有可用文本".to_owned())
+        } else {
+            Ok(output)
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn post_anthropic_messages(
+        &self,
+        config: &ModelConfig,
+        endpoint: &EndpointConfig,
+        url: Url,
+        messages: &[ChatMessage],
+        system: Option<&str>,
+        api_key: &str,
+        thinking: Option<AnthropicThinkingControl>,
+    ) -> Result<(StatusCode, String), String> {
+        let response = self
+            .client
+            .post(url)
+            .timeout(Duration::from_secs(config.timeout_seconds))
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&AnthropicMessageRequest {
+                model: endpoint.model.trim(),
+                max_tokens: 4096,
+                messages,
+                system,
+                stream: false,
+                thinking,
+            })
+            .send()
+            .await
+            .map_err(|error| request_error_message(error, config.backend))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|error| format!("读取模型响应失败：{error}"))?;
+        Ok((status, body))
     }
 }
 
@@ -203,46 +354,47 @@ fn apply_reasoning_policy(
     config: &ModelConfig,
     endpoint: &EndpointConfig,
     messages: &mut [ChatMessage],
-) -> Option<ThinkingControl> {
-    if is_deepseek_api(config, endpoint) {
-        return Some(ThinkingControl {
-            kind: if config.reasoning_enabled {
-                "enabled"
-            } else {
-                "disabled"
-            },
-        });
-    }
-    if config.backend != ModelBackend::Local
-        || !endpoint.model.to_ascii_lowercase().contains("qwen3")
-    {
-        return None;
-    }
+) -> OpenAiReasoningPolicy {
+    let policy = openai_reasoning_policy(config, endpoint);
+    let Some(control) = policy.prompt_control else {
+        return policy;
+    };
     let Some(last_user_message) = messages
         .iter_mut()
         .rev()
         .find(|message| message.role == "user")
     else {
-        return None;
-    };
-    let control = if config.reasoning_enabled {
-        "/think"
-    } else {
-        "/no_think"
+        return policy;
     };
     if !last_user_message.content.contains(control) {
         last_user_message.content.push('\n');
         last_user_message.content.push_str(control);
     }
-    None
+    policy
 }
 
-fn is_deepseek_api(config: &ModelConfig, endpoint: &EndpointConfig) -> bool {
+fn is_anthropic_api(config: &ModelConfig, endpoint: &EndpointConfig) -> bool {
     config.backend == ModelBackend::Api
         && Url::parse(endpoint.base_url.trim())
             .ok()
             .and_then(|url| url.host_str().map(str::to_owned))
-            .is_some_and(|host| host.eq_ignore_ascii_case("api.deepseek.com"))
+            .is_some_and(|host| host.eq_ignore_ascii_case("api.anthropic.com"))
+}
+
+fn anthropic_messages_url(base_url: &str) -> Result<Url, String> {
+    let base = base_url.trim().trim_end_matches('/');
+    let parsed = Url::parse(base).ok();
+    let value = if base.ends_with("/messages") {
+        base.to_owned()
+    } else if parsed
+        .as_ref()
+        .is_some_and(|url| url.path().trim_matches('/').is_empty())
+    {
+        format!("{base}/v1/messages")
+    } else {
+        format!("{base}/messages")
+    };
+    Url::parse(&value).map_err(|_| "无法构建 Anthropic Messages 地址".to_owned())
 }
 
 fn chat_completions_url(base_url: &str) -> Result<Url, String> {
@@ -366,6 +518,22 @@ fn http_error_message(status: StatusCode, body: &str) -> String {
     }
 }
 
+fn should_retry_without_reasoning(status: StatusCode, body: &str) -> bool {
+    if !matches!(
+        status,
+        StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY
+    ) {
+        return false;
+    }
+    let body = body.to_ascii_lowercase();
+    body.contains("reasoning")
+        || body.contains("thinking")
+        || body.contains("unknown field")
+        || body.contains("unexpected field")
+        || body.contains("extra inputs")
+        || body.contains("not permitted")
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AcademicTranslationInput<'a> {
@@ -379,16 +547,24 @@ struct AcademicTranslationInput<'a> {
 #[derive(Serialize)]
 struct ChatCompletionRequest<'a> {
     model: &'a str,
-    messages: Vec<ChatMessage>,
+    messages: &'a [ChatMessage],
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     thinking: Option<ThinkingControl>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'static str>,
 }
 
 #[derive(Serialize)]
-struct ThinkingControl {
-    #[serde(rename = "type")]
-    kind: &'static str,
+struct AnthropicMessageRequest<'a> {
+    model: &'a str,
+    max_tokens: u32,
+    messages: &'a [ChatMessage],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system: Option<&'a str>,
+    stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<AnthropicThinkingControl>,
 }
 
 #[derive(Serialize)]
@@ -410,6 +586,18 @@ struct ChatChoice {
 #[derive(Deserialize)]
 struct ChatResponseMessage {
     content: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AnthropicMessageResponse {
+    content: Vec<AnthropicContentBlock>,
+}
+
+#[derive(Deserialize)]
+struct AnthropicContentBlock {
+    #[serde(rename = "type")]
+    kind: String,
+    text: Option<String>,
 }
 
 #[cfg(test)]
@@ -462,20 +650,20 @@ mod tests {
             content: "Translate this sentence.".to_owned(),
         }];
 
-        let thinking = apply_reasoning_policy(&config, &endpoint, &mut messages);
+        let reasoning = apply_reasoning_policy(&config, &endpoint, &mut messages);
 
-        assert!(thinking.is_none());
+        assert_eq!(reasoning.reasoning_effort, Some("none"));
         assert_eq!(messages[0].content, "Translate this sentence.\n/no_think");
 
         config.reasoning_enabled = true;
         messages[0].content = "Translate this sentence.".to_owned();
-        let thinking = apply_reasoning_policy(&config, &endpoint, &mut messages);
-        assert!(thinking.is_none());
+        let reasoning = apply_reasoning_policy(&config, &endpoint, &mut messages);
+        assert_eq!(reasoning.reasoning_effort, Some("medium"));
         assert_eq!(messages[0].content, "Translate this sentence.\n/think");
     }
 
     #[test]
-    fn leaves_other_models_and_remote_apis_unchanged() {
+    fn leaves_unknown_models_and_remote_apis_unchanged() {
         let mut config = ModelConfig::default();
         config.local.model = "qwen2.5-14b".to_owned();
         let endpoint = active_endpoint(&config).clone();
@@ -483,15 +671,15 @@ mod tests {
             role: "user",
             content: "Translate this sentence.".to_owned(),
         }];
-        let thinking = apply_reasoning_policy(&config, &endpoint, &mut messages);
-        assert!(thinking.is_none());
+        let reasoning = apply_reasoning_policy(&config, &endpoint, &mut messages);
+        assert_eq!(reasoning.reasoning_effort, Some("none"));
         assert_eq!(messages[0].content, "Translate this sentence.");
 
         config.backend = ModelBackend::Api;
-        config.api.model = "qwen3-14b".to_owned();
+        config.api.model = "ordinary-chat-model".to_owned();
         let endpoint = active_endpoint(&config).clone();
-        let thinking = apply_reasoning_policy(&config, &endpoint, &mut messages);
-        assert!(thinking.is_none());
+        let reasoning = apply_reasoning_policy(&config, &endpoint, &mut messages);
+        assert!(!reasoning.has_request_control());
         assert_eq!(messages[0].content, "Translate this sentence.");
     }
 
@@ -507,13 +695,33 @@ mod tests {
             content: "Translate this sentence.".to_owned(),
         }];
 
-        let disabled = apply_reasoning_policy(&config, &endpoint, &mut messages).unwrap();
-        assert_eq!(disabled.kind, "disabled");
+        let disabled = apply_reasoning_policy(&config, &endpoint, &mut messages);
+        assert_eq!(disabled.thinking.unwrap().kind, "disabled");
         assert_eq!(messages[0].content, "Translate this sentence.");
 
         config.reasoning_enabled = true;
-        let enabled = apply_reasoning_policy(&config, &endpoint, &mut messages).unwrap();
-        assert_eq!(enabled.kind, "enabled");
+        let enabled = apply_reasoning_policy(&config, &endpoint, &mut messages);
+        assert_eq!(enabled.thinking.unwrap().kind, "enabled");
+    }
+
+    #[test]
+    fn retries_only_schema_errors_that_may_be_caused_by_reasoning_fields() {
+        assert!(should_retry_without_reasoning(
+            StatusCode::BAD_REQUEST,
+            r#"{"error":"unknown field reasoning_effort"}"#
+        ));
+        assert!(should_retry_without_reasoning(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            r#"{"error":"extra inputs are not permitted"}"#
+        ));
+        assert!(!should_retry_without_reasoning(
+            StatusCode::BAD_REQUEST,
+            r#"{"error":"model not found"}"#
+        ));
+        assert!(!should_retry_without_reasoning(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            r#"{"error":"unknown field reasoning_effort"}"#
+        ));
     }
 
     #[test]
@@ -523,6 +731,28 @@ mod tests {
                 .unwrap()
                 .as_str(),
             "https://api.deepseek.com/chat/completions"
+        );
+    }
+
+    #[test]
+    fn uses_anthropic_official_messages_path() {
+        assert_eq!(
+            anthropic_messages_url("https://api.anthropic.com/v1")
+                .unwrap()
+                .as_str(),
+            "https://api.anthropic.com/v1/messages"
+        );
+        assert_eq!(
+            anthropic_messages_url("https://api.anthropic.com")
+                .unwrap()
+                .as_str(),
+            "https://api.anthropic.com/v1/messages"
+        );
+        assert_eq!(
+            anthropic_messages_url("https://api.anthropic.com/v1/messages")
+                .unwrap()
+                .as_str(),
+            "https://api.anthropic.com/v1/messages"
         );
     }
 

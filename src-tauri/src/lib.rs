@@ -11,6 +11,7 @@ mod model_config;
 mod models;
 mod overlay_manager;
 mod overlay_policy;
+mod reasoning;
 mod selection_button;
 mod selection_service;
 mod single_instance;

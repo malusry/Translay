@@ -16,6 +16,8 @@ export interface ModelConfigView {
   reasoningEnabled: boolean;
   local: EndpointConfig;
   api: EndpointConfig;
+  localModels: Record<string, string>;
+  apiModels: Record<string, string>;
   timeoutSeconds: number;
   hasApiKey: boolean;
   apiKeyHint: string | null;

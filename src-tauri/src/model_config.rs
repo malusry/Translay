@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
@@ -36,6 +37,10 @@ pub struct ModelConfig {
     pub reasoning_enabled: bool,
     pub local: EndpointConfig,
     pub api: EndpointConfig,
+    #[serde(default)]
+    pub local_models: BTreeMap<String, String>,
+    #[serde(default)]
+    pub api_models: BTreeMap<String, String>,
     pub timeout_seconds: u64,
 }
 
@@ -53,6 +58,8 @@ impl Default for ModelConfig {
                 base_url: "https://api.openai.com/v1".to_owned(),
                 model: String::new(),
             },
+            local_models: BTreeMap::new(),
+            api_models: BTreeMap::new(),
             timeout_seconds: 60,
         }
     }
@@ -101,12 +108,14 @@ impl ModelConfigStore {
         let path = directory.join(MODEL_CONFIG_FILENAME);
         migrate_legacy_model_config(&path)?;
         fs::create_dir_all(&directory).map_err(|error| format!("无法创建配置目录：{error}"))?;
-        let config = if path.exists() {
+        let mut config = if path.exists() {
             let bytes = fs::read(&path).map_err(|error| format!("无法读取模型配置：{error}"))?;
             serde_json::from_slice(&bytes).map_err(|error| format!("模型配置格式无效：{error}"))?
         } else {
             ModelConfig::default()
         };
+        remember_local_model(&mut config);
+        remember_api_model(&mut config);
         Ok(Self {
             path,
             inner: Arc::new(RwLock::new(config)),
@@ -122,6 +131,21 @@ impl ModelConfigStore {
 
     pub fn save(&self, config: ModelConfig) -> Result<(), String> {
         validate_config(&config)?;
+        self.persist(config)
+    }
+
+    pub fn select_backend(&self, backend: ModelBackend) -> Result<ModelConfig, String> {
+        let mut config = self.get();
+        if config.backend == backend {
+            return Ok(config);
+        }
+        config.backend = backend;
+        validate_config_without_active_model(&config)?;
+        self.persist(config.clone())?;
+        Ok(config)
+    }
+
+    fn persist(&self, config: ModelConfig) -> Result<(), String> {
         let data = serde_json::to_vec_pretty(&config)
             .map_err(|error| format!("无法序列化模型配置：{error}"))?;
         fs::write(&self.path, data).map_err(|error| format!("无法保存模型配置：{error}"))?;
@@ -130,6 +154,58 @@ impl ModelConfigStore {
             .write()
             .unwrap_or_else(|error| error.into_inner()) = config;
         Ok(())
+    }
+}
+
+pub fn remember_api_model(config: &mut ModelConfig) {
+    let model = config.api.model.trim().to_owned();
+    if model.is_empty() {
+        return;
+    }
+    if let Some(provider) = api_provider_id(&config.api.base_url) {
+        config.api_models.insert(provider.to_owned(), model);
+    }
+}
+
+pub fn remember_local_model(config: &mut ModelConfig) {
+    let model = config.local.model.trim().to_owned();
+    if model.is_empty() {
+        return;
+    }
+    if let Some(provider) = local_provider_id(&config.local.base_url) {
+        config.local_models.insert(provider.to_owned(), model);
+    }
+}
+
+fn local_provider_id(base_url: &str) -> Option<&'static str> {
+    let url = reqwest::Url::parse(base_url.trim()).ok()?;
+    let host = url.host_str()?.to_ascii_lowercase();
+    if !matches!(host.as_str(), "127.0.0.1" | "localhost" | "::1") {
+        return None;
+    }
+    match url.port()? {
+        11434 => Some("ollama"),
+        1234 => Some("lmstudio"),
+        1337 => Some("jan"),
+        8080 => Some("llamacpp"),
+        8000 => Some("vllm"),
+        _ => None,
+    }
+}
+
+fn api_provider_id(base_url: &str) -> Option<&'static str> {
+    let host = reqwest::Url::parse(base_url.trim())
+        .ok()?
+        .host_str()?
+        .to_ascii_lowercase();
+    match host.as_str() {
+        "api.deepseek.com" => Some("deepseek"),
+        "api.openai.com" => Some("openai"),
+        "api.anthropic.com" => Some("anthropic"),
+        "open.bigmodel.cn" => Some("zhipu"),
+        "api.moonshot.cn" => Some("moonshot"),
+        "generativelanguage.googleapis.com" => Some("gemini"),
+        _ => None,
     }
 }
 
@@ -160,22 +236,27 @@ fn migrate_legacy_model_config(current_path: &Path) -> Result<bool, String> {
 }
 
 pub fn validate_config(config: &ModelConfig) -> Result<(), String> {
-    if !(5..=180).contains(&config.timeout_seconds) {
-        return Err("请求超时必须在 5 到 180 秒之间".to_owned());
+    validate_config_without_active_model(config)?;
+    let endpoint = match config.backend {
+        ModelBackend::Local => &config.local,
+        ModelBackend::Api => &config.api,
+    };
+    if endpoint.model.trim().is_empty() {
+        return Err("请先右键托盘打开“配置”，在模型页面填写模型名称".to_owned());
     }
-    validate_endpoint(&config.local, false, config.backend == ModelBackend::Local)?;
-    validate_endpoint(&config.api, true, config.backend == ModelBackend::Api)?;
     Ok(())
 }
 
-fn validate_endpoint(
-    endpoint: &EndpointConfig,
-    require_https: bool,
-    require_model: bool,
-) -> Result<(), String> {
-    if require_model && endpoint.model.trim().is_empty() {
-        return Err("请先右键托盘打开“配置”，在模型页面填写模型名称".to_owned());
+fn validate_config_without_active_model(config: &ModelConfig) -> Result<(), String> {
+    if !(5..=180).contains(&config.timeout_seconds) {
+        return Err("请求超时必须在 5 到 180 秒之间".to_owned());
     }
+    validate_endpoint(&config.local, false)?;
+    validate_endpoint(&config.api, true)?;
+    Ok(())
+}
+
+fn validate_endpoint(endpoint: &EndpointConfig, require_https: bool) -> Result<(), String> {
     let url = reqwest::Url::parse(endpoint.base_url.trim())
         .map_err(|_| "服务地址不是有效 URL".to_owned())?;
     if !matches!(url.scheme(), "http" | "https") {
@@ -230,6 +311,70 @@ mod tests {
         let mut config = valid();
         config.api.base_url = "http://user:pass@example.com/v1".to_owned();
         assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn source_selection_can_open_an_unconfigured_backend() {
+        let root = temporary_test_directory("select-unconfigured-backend");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join(MODEL_CONFIG_FILENAME);
+        let store = ModelConfigStore {
+            path: path.clone(),
+            inner: Arc::new(RwLock::new(ModelConfig::default())),
+        };
+
+        let selected = store.select_backend(ModelBackend::Api).unwrap();
+
+        assert_eq!(selected.backend, ModelBackend::Api);
+        assert!(selected.api.model.is_empty());
+        let persisted: ModelConfig = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert_eq!(persisted.backend, ModelBackend::Api);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn remembers_model_names_for_each_official_api_provider() {
+        let mut config = valid();
+        config.api.base_url = "https://api.anthropic.com/v1".to_owned();
+        config.api.model = "claude-sonnet-5".to_owned();
+
+        remember_api_model(&mut config);
+
+        assert_eq!(
+            config.api_models.get("anthropic").map(String::as_str),
+            Some("claude-sonnet-5")
+        );
+    }
+
+    #[test]
+    fn remembers_model_names_for_each_local_tool() {
+        let mut config = valid();
+        config.local.base_url = "http://127.0.0.1:1234/v1".to_owned();
+        config.local.model = "qwen3-14b".to_owned();
+
+        remember_local_model(&mut config);
+
+        assert_eq!(
+            config.local_models.get("lmstudio").map(String::as_str),
+            Some("qwen3-14b")
+        );
+    }
+
+    #[test]
+    fn older_configs_without_api_model_history_still_load() {
+        let value = serde_json::json!({
+            "backend": "api",
+            "mode": "conversational",
+            "reasoningEnabled": false,
+            "local": { "baseUrl": "http://localhost:11434/v1", "model": "qwen" },
+            "api": { "baseUrl": "https://api.openai.com/v1", "model": "gpt-5.6-terra" },
+            "timeoutSeconds": 60
+        });
+
+        let config: ModelConfig = serde_json::from_value(value).unwrap();
+
+        assert!(config.api_models.is_empty());
+        assert!(config.local_models.is_empty());
     }
 
     #[test]

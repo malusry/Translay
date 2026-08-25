@@ -10,7 +10,7 @@ use crate::{
     latest_capture_store::LatestCaptureStore,
     model_config::{
         ApiKeyStatus, ModelBackend, ModelConfig, ModelConfigStore, ModelConfigView,
-        SaveModelConfig, validate_config,
+        SaveModelConfig, remember_api_model, remember_local_model, validate_config,
     },
     models,
     overlay_manager::OverlayManager,
@@ -19,9 +19,72 @@ use crate::{
     translation_service::{ConnectionTestResult, TranslationService},
 };
 
-use super::{model_backend, windows};
+use super::{local_model_detection, model_backend, windows};
 
 static OVERLAY_FRONTEND_READY: AtomicBool = AtomicBool::new(false);
+
+const PROVIDER_API_PORTALS: [(&str, &str); 11] = [
+    ("deepseek", "https://platform.deepseek.com/api_keys"),
+    ("openai", "https://platform.openai.com/api-keys"),
+    ("anthropic", "https://platform.claude.com/settings/keys"),
+    (
+        "zhipu",
+        "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys",
+    ),
+    ("moonshot", "https://platform.moonshot.cn/console/api-keys"),
+    ("gemini", "https://aistudio.google.com/apikey"),
+    ("ollama", "https://docs.ollama.com/api/openai-compatibility"),
+    ("lmstudio", "https://lmstudio.ai/docs/developer"),
+    ("jan", "https://www.jan.ai/docs/desktop/api-server"),
+    (
+        "llamacpp",
+        "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+    ),
+    (
+        "vllm",
+        "https://docs.vllm.ai/en/stable/getting_started/quickstart/",
+    ),
+];
+
+fn provider_api_portal_url(provider: &str) -> Option<&'static str> {
+    PROVIDER_API_PORTALS
+        .iter()
+        .find_map(|(id, url)| (*id == provider).then_some(*url))
+}
+
+#[tauri::command]
+pub(super) fn open_provider_api_portal(provider: String) -> Result<(), String> {
+    let url = provider_api_portal_url(&provider)
+        .ok_or_else(|| "未知的模型服务，无法打开官方页面".to_owned())?;
+    open_external_url(url)
+}
+
+fn open_external_url(url: &str) -> Result<(), String> {
+    use ::windows::{
+        Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL},
+        core::PCWSTR,
+    };
+
+    let operation = "open\0".encode_utf16().collect::<Vec<_>>();
+    let target = url
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR(operation.as_ptr()),
+            PCWSTR(target.as_ptr()),
+            None,
+            None,
+            SW_SHOWNORMAL,
+        )
+    };
+    if result.0 as isize <= 32 {
+        return Err("无法调用默认浏览器打开模型服务官方页面".to_owned());
+    }
+    Ok(())
+}
 
 #[tauri::command]
 pub(super) fn overlay_frontend_ready() {
@@ -153,6 +216,14 @@ pub(super) fn get_model_api_key_status(
     read_api_key_status(credentials.inner(), &base_url)
 }
 
+#[tauri::command]
+pub(super) async fn detect_active_local_model(
+    provider: String,
+    base_url: String,
+) -> Option<String> {
+    local_model_detection::detect(&provider, &base_url).await
+}
+
 fn read_api_key_status(
     credentials: &CredentialStore,
     base_url: &str,
@@ -174,8 +245,14 @@ pub(super) fn save_model_provider_config(
     let provider = input.backend;
     let mut next = config.get();
     match provider {
-        ModelBackend::Local => next.local = input.local,
-        ModelBackend::Api => next.api = input.api,
+        ModelBackend::Local => {
+            next.local = input.local;
+            remember_local_model(&mut next);
+        }
+        ModelBackend::Api => {
+            next.api = input.api;
+            remember_api_model(&mut next);
+        }
     }
     next.timeout_seconds = input.timeout_seconds;
 
@@ -201,20 +278,24 @@ pub(super) fn activate_model_backend(
     config: tauri::State<'_, ModelConfigStore>,
     credentials: tauri::State<'_, CredentialStore>,
 ) -> Result<ModelConfigView, String> {
-    model_backend::switch_model_backend(config.inner(), credentials.inner(), backend)?;
+    model_backend::select_model_backend(config.inner(), backend)?;
     model_backend::sync_model_backend_surfaces(&app, config.inner(), credentials.inner())
 }
 
 #[tauri::command]
 pub(super) fn save_translation_preferences(
+    app: tauri::AppHandle,
     mode: TranslationMode,
     reasoning_enabled: bool,
     config: tauri::State<'_, ModelConfigStore>,
+    credentials: tauri::State<'_, CredentialStore>,
 ) -> Result<(), String> {
     let mut next = config.get();
     next.mode = mode;
     next.reasoning_enabled = reasoning_enabled;
-    config.save(next)
+    config.save(next)?;
+    model_backend::refresh_tray_model_switch(&app, config.inner(), credentials.inner());
+    Ok(())
 }
 
 #[tauri::command]
@@ -240,6 +321,8 @@ pub(super) async fn test_model_connection(
         reasoning_enabled: input.reasoning_enabled,
         local: input.local,
         api: input.api,
+        local_models: Default::default(),
+        api_models: Default::default(),
         timeout_seconds: input.timeout_seconds,
     };
     let service = service.inner().clone();
@@ -261,4 +344,24 @@ pub(super) fn hide_settings_window(app: tauri::AppHandle) -> Result<(), String> 
 #[tauri::command]
 pub(super) fn minimize_settings_window(app: tauri::AppHandle) -> Result<(), String> {
     windows::minimize_settings_window(&app)
+}
+
+#[cfg(test)]
+mod provider_api_portal_tests {
+    use super::{PROVIDER_API_PORTALS, provider_api_portal_url};
+
+    #[test]
+    fn exposes_the_confirmed_api_and_local_provider_portals() {
+        assert_eq!(PROVIDER_API_PORTALS.len(), 11);
+        assert_eq!(
+            provider_api_portal_url("gemini"),
+            Some("https://aistudio.google.com/apikey")
+        );
+        assert_eq!(
+            provider_api_portal_url("ollama"),
+            Some("https://docs.ollama.com/api/openai-compatibility")
+        );
+        assert_eq!(provider_api_portal_url("custom"), None);
+        assert_eq!(provider_api_portal_url("https://example.com"), None);
+    }
 }
