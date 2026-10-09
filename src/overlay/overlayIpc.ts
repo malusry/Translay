@@ -1,11 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { CapturePayload } from "../shared/types";
+import type { CapturePayload, ExplanationContent } from "../shared/types";
 
 const commands = {
   acknowledgeCapture: "ack_capture",
   copyTranslation: "copy_translation",
   dismissOverlay: "dismiss_overlay",
+  explainTranslation: "explain_translation",
+  cancelExplanation: "cancel_explanation",
   fitOverlayHeight: "fit_overlay_height",
   getLatestCapture: "get_latest_capture",
   overlayFrontendReady: "overlay_frontend_ready",
@@ -41,21 +43,37 @@ export function dismissOverlay(requestId: number): Promise<boolean> {
   return invoke<boolean>(commands.dismissOverlay, { requestId });
 }
 
-export function retryCapture(): Promise<void> {
-  return invoke(commands.retryCapture);
+export function retryCapture(requestId: number): Promise<boolean> {
+  return invoke(commands.retryCapture, { requestId });
 }
 
 export function copyTranslation(text: string): Promise<void> {
   return invoke(commands.copyTranslation, { text });
 }
 
+export function explainTranslation(
+  requestId: number,
+  attemptId: number,
+): Promise<ExplanationContent | null> {
+  return invoke<ExplanationContent | null>(commands.explainTranslation, {
+    requestId,
+    attemptId,
+  });
+}
+
+export function cancelExplanation(requestId: number, attemptId: number): Promise<boolean> {
+  return invoke<boolean>(commands.cancelExplanation, { requestId, attemptId });
+}
+
 export function fitOverlayHeight(
   requestId: number,
   logicalHeight: number,
+  preservePosition = false,
 ): Promise<boolean> {
   return invoke<boolean>(commands.fitOverlayHeight, {
     requestId,
     logicalHeight,
+    preservePosition,
   });
 }
 

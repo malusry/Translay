@@ -1,0 +1,270 @@
+{
+  "date": "2026-09-09T03:46:56.496114+00:00",
+  "model": "deepseek-v4-flash",
+  "reasoningEnabled": false,
+  "systemPrompt": "You are Translay, a faithful translator into natural, conversational Simplified Chinese.\n\nOUTPUT\nReturn exactly one JSON object: {\"translation\":\"...\",\"toneNote\":null}. translation must be a nonempty string; toneNote may instead be one short plain Chinese sentence of at most 48 characters. Escape paragraph breaks inside JSON strings. No Markdown fences or text outside the object. Do not wrap the translation itself in extra quotation marks. The translation field contains only the translation or dictionary entry, never a separate explanation.\n\nCHOOSE THE RIGHT READING\nUse dictionary format only for an isolated vocabulary headword or lexical noun phrase, such as bank, track, run or machine learning. Output one to five common established senses, one numbered line per sense in translation, with an optional useful part-of-speech label. Order common meanings first; use fewer senses when unsure rather than adding rare or overly broad meanings. No examples, headings, pronunciation or usage notes. toneNote must be null for dictionary entries.\n\nOtherwise translate the entire utterance. Full sentences, conversational replies and conventional idioms are NOT dictionary queries, even when short. Treat Fine., Great. and Sure. as replies. Treat That tracks., I'm down for pizza. and Let's call it a day. as whole expressions. Do not enumerate their component words or multiple sentence paraphrases as dictionary senses.\n\nTRANSLATION FIDELITY\nInterpret the source from the perspective of a native speaker in its own language community, including contemporary everyday and online usage supported by the text. Preserve source-culture imagery, social roles, humor, irony, register, emotional intensity and community-specific terminology. Use clear, natural Chinese as the medium of understanding, but do not replace a culture-specific expression with a Chinese meme, idiom or cultural reference merely to sound familiar. When no direct Chinese equivalent exists, use a concise meaning-first rendering; retain a distinctive original term in parentheses only when it materially improves understanding. Preserve names, facts, code, URLs, necessary technical terms, paragraph boundaries, negation and uncertainty. Avoid word-for-word translation, forced domestication and unsupported trendy slang.\n\nPreserve what is unspecified: declining an offer does not tell you whether it concerns an outing, a job, an object or another proposal. Keep the refusal equally general. For explicit sarcasm, convey the contrast in the source naturally; do not add another assertion or invented reply. Never invent circumstances or reasons to make the translation sound fluent.\n\nOPTIONAL NOTE\nDefault toneNote to null. Add a note only if it contributes a useful reading cue beyond the translation, such as how an idiom signals agreement or how indirect wording softens a request. Describe the observable function, not the speaker's hidden emotional state. Prefer 12–28 Chinese characters, one sentence, no heading, examples, Markdown or line breaks. Do not repeat the content of the translation. Omit generic judgments about an expression being light, natural, friendly or casual.\n\nOrdinary facts, ordinary instructions and dictionary entries need no note. Bare replies such as Fine., Great., Sure. and OK. lack enough context to infer reluctance or sarcasm, so use null. A polite request does not by itself show anger or dissatisfaction. Explicit disagreement supports a reserved opinion, but does not prove coercion or anger. Explicit sarcastic contrast supports irony, but does not prove self-mockery or helplessness. A note is optional even in these supported cases if the translation already makes the function clear. When unsure, use null.\n\nExamples of the response format:\nbank → {\"translation\":\"1. [名词] 银行\\n2. [名词] 河岸\",\"toneNote\":null}\nThat tracks. → {\"translation\":\"有道理。\",\"toneNote\":\"口语中表示认可对方的判断。\"}\nThe meeting starts at three. → {\"translation\":\"会议三点开始。\",\"toneNote\":null}\n",
+  "systemPromptSha256": "27d3a52ca7bac8aff2f938dbe7da4bf715c4ee2beff0f240b26996ae4bf5cbb2",
+  "rubric": {
+    "translation": "完整保留原意、否定、数字和语用强度；惯用表达按整体翻译；普通词汇使用 1–5 行编号词典释义。",
+    "note": "附注可为空；出现时必须有原文依据，解释表达用途而非复述译文，不推断未提供的情绪或人际关系。null 类必须省略附注。",
+    "format": "严格 JSON 对象，translation 为非空字符串，toneNote 为 null 或不超过 48 字的单行字符串；不得与译文完全相同。",
+    "acceptance": "所有样例译文基本准确，零无依据情绪推断，null 类不得强加附注，格式全部通过。两次输出措辞可不同。记录可精简的说明，不用格式通过替代语义审阅。",
+    "review": "由助手按预先固定标准人工审阅，不是独立或盲法评审。示例题与未见题分别标记。"
+  },
+  "cases": [
+    {
+      "id": "holdout-fact",
+      "group": "factual",
+      "split": "holdout",
+      "source": "The deadline is Friday at 5 p.m.\nLate submissions will not be accepted.",
+      "notePolicy": "null",
+      "check": "保留周五下午五点、拒收迟交与段落。"
+    },
+    {
+      "id": "holdout-word",
+      "group": "dictionary",
+      "split": "holdout",
+      "source": "charge",
+      "notePolicy": "null",
+      "check": "编号 1–5 项常见词义，不附加语气。"
+    },
+    {
+      "id": "holdout-short",
+      "group": "ambiguous",
+      "split": "holdout",
+      "source": "Okay.",
+      "notePolicy": "null",
+      "check": "中性肯定，无勉强/敷衍附注。"
+    },
+    {
+      "id": "holdout-idiom",
+      "group": "idiom",
+      "split": "holdout",
+      "source": "I'm on the fence about moving.",
+      "notePolicy": "optional",
+      "check": "对搬家犹豫，不能字面译成在篱笆上。"
+    },
+    {
+      "id": "holdout-polite",
+      "group": "polite",
+      "split": "holdout",
+      "source": "Could we perhaps try a different approach?",
+      "notePolicy": "optional",
+      "check": "试探提出换方法；不可断言指责别人。"
+    },
+    {
+      "id": "holdout-refusal",
+      "group": "supported-context",
+      "split": "holdout",
+      "source": "Thanks, but no thanks—I don't want it.",
+      "notePolicy": "optional",
+      "check": "明确拒绝而非感谢接受；可说明拒绝，不推断愤怒。"
+    }
+  ],
+  "results": [
+    {
+      "id": "holdout-fact",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"截止时间是周五下午5点。\\n逾期提交将不被接受。\",\"toneNote\":null}",
+      "output": {
+        "translation": "截止时间是周五下午5点。\n逾期提交将不被接受。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.866,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-word",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"1. [动词] 收费；要价\\n2. [动词] 指控；控告\\n3. [动词] 充电 \\n4. [名词] 费用\\n5. [名词] 指控\",\"toneNote\":null}",
+      "output": {
+        "translation": "1. [动词] 收费；要价\n2. [动词] 指控；控告\n3. [动词] 充电 \n4. [名词] 费用\n5. [名词] 指控",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.713,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-short",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"好的。\",\"toneNote\":null}",
+      "output": {
+        "translation": "好的。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.773,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-idiom",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"我对搬家这件事还在犹豫。\",\"toneNote\":null}",
+      "output": {
+        "translation": "我对搬家这件事还在犹豫。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.928,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-polite",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"我们能不能换一种方式试试？\",\"toneNote\":null}",
+      "output": {
+        "translation": "我们能不能换一种方式试试？",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.584,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-refusal",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"谢谢，但不用了——我不想要。\",\"toneNote\":null}",
+      "output": {
+        "translation": "谢谢，但不用了——我不想要。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.496,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-fact",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"截止时间是周五下午5点。\\n逾期提交将不予受理。\",\"toneNote\":null}",
+      "output": {
+        "translation": "截止时间是周五下午5点。\n逾期提交将不予受理。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 1.021,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-word",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"1. [动词] 收费，要价\\n2. [动词] 充电\\n3. [动词] 指控，控告\\n4. [名词] 费用\\n5. [名词] 电荷\\n6. [动词] 冲锋\",\"toneNote\":null}",
+      "output": {
+        "translation": "1. [动词] 收费，要价\n2. [动词] 充电\n3. [动词] 指控，控告\n4. [名词] 费用\n5. [名词] 电荷\n6. [动词] 冲锋",
+        "toneNote": null
+      },
+      "automaticIssues": [
+        "dictionary-format"
+      ],
+      "seconds": 1.211,
+      "manualReview": {
+        "status": "fail-format",
+        "note": "模型给出六项词义；未满足五项上限，应用恢复的后处理会保留前五项。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-short",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"好的。\",\"toneNote\":null}",
+      "output": {
+        "translation": "好的。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.667,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-idiom",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"我对搬家这事犹豫不决。\",\"toneNote\":null}",
+      "output": {
+        "translation": "我对搬家这事犹豫不决。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.82,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-polite",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"我们或许可以试试不同的方法？\",\"toneNote\":null}",
+      "output": {
+        "translation": "我们或许可以试试不同的方法？",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.461,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "holdout-refusal",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"谢谢，但还是不用了——我不想要。\",\"toneNote\":null}",
+      "output": {
+        "translation": "谢谢，但还是不用了——我不想要。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.679,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    }
+  ],
+  "summary": {
+    "responses": 12,
+    "automaticIssueResponses": 1,
+    "manualReview": {
+      "pass": 11,
+      "fail-format": 1
+    },
+    "noteResponses": 0,
+    "medianSeconds": 0.743
+  }
+}

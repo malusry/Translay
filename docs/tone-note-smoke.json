@@ -1,0 +1,123 @@
+{
+  "runs": [
+    {
+      "model": "deepseek-v4-flash",
+      "reasoningEnabled": false,
+      "systemPromptSha256": "655105f152c690ee63b8741667112d38103fc9f451503845ea341623d864a84c",
+      "scope": "Six synthetic cases, one run each; translation response smoke check, not a quality benchmark. No app configuration changed.",
+      "cases": [
+        {
+          "id": "idiom",
+          "source": "That tracks.",
+          "seconds": 1.24,
+          "output": {
+            "translation": "有道理。",
+            "toneNote": "口语中表示认可对方的判断。"
+          },
+          "valid": true
+        },
+        {
+          "id": "willingness",
+          "source": "I'm down for pizza.",
+          "seconds": 1.2,
+          "output": {
+            "translation": "我同意吃披萨。",
+            "toneNote": "口语中表示乐意、赞成做某事。"
+          },
+          "valid": true
+        },
+        {
+          "id": "factual",
+          "source": "The meeting starts at three.",
+          "seconds": 1.24,
+          "output": {
+            "translation": "会议三点开始。",
+            "toneNote": null
+          },
+          "valid": true
+        },
+        {
+          "id": "dictionary",
+          "source": "bank",
+          "errorType": "JSONDecodeError"
+        },
+        {
+          "id": "polite-request",
+          "source": "Would you mind keeping it down?",
+          "seconds": 0.86,
+          "output": {
+            "translation": "你能不能小声一点？",
+            "toneNote": "用客气的问句委婉表达不满。"
+          },
+          "valid": true
+        },
+        {
+          "id": "ambiguous",
+          "source": "Fine.",
+          "seconds": 1.1,
+          "output": {
+            "translation": "好的。",
+            "toneNote": "口语中常表示勉强同意或略带不快。"
+          },
+          "valid": true
+        }
+      ]
+    },
+    {
+      "model": "deepseek-v4-flash",
+      "reasoningEnabled": false,
+      "systemPromptSha256": "412e4f58f537e521ae238f1de921589f2013dda945ec5b9ddc65f142d6759649",
+      "scope": "Eight synthetic cases, one run each; six repeated and two holdouts. Not a quality benchmark. No app configuration changed.",
+      "cases": [
+        {
+          "id": "idiom",
+          "source": "That tracks.",
+          "errorType": "URLError",
+          "rawOutput": null
+        },
+        {
+          "id": "willingness",
+          "source": "I'm down for pizza.",
+          "errorType": "URLError",
+          "rawOutput": null
+        },
+        {
+          "id": "factual",
+          "source": "The meeting starts at three.",
+          "errorType": "URLError",
+          "rawOutput": null
+        },
+        {
+          "id": "dictionary",
+          "source": "bank",
+          "errorType": "URLError",
+          "rawOutput": null
+        },
+        {
+          "id": "polite-request",
+          "source": "Would you mind keeping it down?",
+          "errorType": "URLError",
+          "rawOutput": null
+        },
+        {
+          "id": "ambiguous",
+          "source": "Fine.",
+          "errorType": "URLError",
+          "rawOutput": null
+        },
+        {
+          "id": "holdout-factual",
+          "source": "The package will arrive tomorrow.",
+          "errorType": "URLError",
+          "rawOutput": null
+        },
+        {
+          "id": "holdout-dictionary",
+          "source": "track",
+          "errorType": "URLError",
+          "rawOutput": null
+        }
+      ]
+    }
+  ]
+}

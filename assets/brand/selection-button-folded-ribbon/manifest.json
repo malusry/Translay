@@ -1,0 +1,105 @@
+{
+  "status": "integrated-selection-button",
+  "master": "translay-folded-ribbon.svg",
+  "viewBox": "0 0 64 64",
+  "sizes": [
+    20,
+    24,
+    28,
+    32,
+    40,
+    48,
+    56,
+    64,
+    128,
+    256
+  ],
+  "gradients": [
+    {
+      "attributes": "id=\"ribbon\" x1=\"5\" y1=\"15\" x2=\"58\" y2=\"22\" gradientUnits=\"userSpaceOnUse\"",
+      "stops": [
+        "stop-color=\"#B4D8AD\"/",
+        "offset=\".32\" stop-color=\"#72B9A8\"/",
+        "offset=\".65\" stop-color=\"#419A9B\"/",
+        "offset=\"1\" stop-color=\"#6867A4\"/"
+      ]
+    },
+    {
+      "attributes": "id=\"stem\" x1=\"33\" y1=\"21\" x2=\"36\" y2=\"56\" gradientUnits=\"userSpaceOnUse\"",
+      "stops": [
+        "stop-color=\"#343E70\"/",
+        "offset=\".48\" stop-color=\"#7771A4\"/",
+        "offset=\"1\" stop-color=\"#B59BC4\"/"
+      ]
+    },
+    {
+      "attributes": "id=\"crease\" x1=\"27\" y1=\"23\" x2=\"30\" y2=\"48\" gradientUnits=\"userSpaceOnUse\"",
+      "stops": [
+        "stop-color=\"#C1DEBC\"/",
+        "offset=\".5\" stop-color=\"#7AB8AE\"/",
+        "offset=\"1\" stop-color=\"#467F8C\"/"
+      ]
+    },
+    {
+      "attributes": "id=\"lip\" x1=\"41\" y1=\"20\" x2=\"60\" y2=\"9\" gradientUnits=\"userSpaceOnUse\"",
+      "stops": [
+        "stop-color=\"#3E687F\"/",
+        "offset=\"1\" stop-color=\"#9892BE\"/"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "file": "translay-folded-ribbon.svg",
+      "sha256": "8e98fa65bfbb621e35dfd68b8c08c050108260d7d62a28776b8251266de90960"
+    },
+    {
+      "file": "approved-comparison.png",
+      "sha256": "2df4a7cd2f737a02282f2b48d5b61e4067cb294191741fc8570a9801490d9f5b"
+    },
+    {
+      "file": "size-preview.png",
+      "sha256": "b62f781284062f0cf8a4bc7ed0af9fb41707bb2b6eb55f41125e59d1d463e362"
+    },
+    {
+      "file": "png/20.png",
+      "sha256": "8f10c0be393a4d7721c0819f14e91b7a7bef6159bbc7b5bd7710dfe3b83f95d6"
+    },
+    {
+      "file": "png/24.png",
+      "sha256": "97d672224ee2e1a5e1ddf4051ac1181ffb9e221ef70cbe0eb4d742cc7c06dfda"
+    },
+    {
+      "file": "png/28.png",
+      "sha256": "3c47c0e6d3432344ba26ca05fc681d3f8f81954fde7e19159c94668e91dfb7e0"
+    },
+    {
+      "file": "png/32.png",
+      "sha256": "69c598008e2e69217d8df26db7317520402b1f46fe79bcbb473e7cb630fa3901"
+    },
+    {
+      "file": "png/40.png",
+      "sha256": "901fea082a6d1497b7597caa42764a9a461bea53932e5470cfd45083f5efe1e4"
+    },
+    {
+      "file": "png/48.png",
+      "sha256": "31fcb50fe9ff3c4e22dbdf01d1036f8bc68d055478147c756fc4b2850253617a"
+    },
+    {
+      "file": "png/56.png",
+      "sha256": "b1242723eb52a9799357e2188a36542de816f9a28306abafa145c8534ca6ec72"
+    },
+    {
+      "file": "png/64.png",
+      "sha256": "c9018616c843d1ec75aec88d15eb20a4dd1fc1556ee8ac7ada668b8c9eac1fcc"
+    },
+    {
+      "file": "png/128.png",
+      "sha256": "4e5619642881e04608aa0b0cde26defec3b0a32cd1503d380df8c6576934c694"
+    },
+    {
+      "file": "png/256.png",
+      "sha256": "7c7fb5adb4080a94a172cb1f04d1ec50a7d2f30c7cb05f54f8566df3f2df92e8"
+    }
+  ]
+}

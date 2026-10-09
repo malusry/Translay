@@ -16,7 +16,10 @@ import {
 } from "./overlayDelivery";
 import {
   applyPayload,
+  conversationalToneNote,
   shouldBridgeLoadingToResult,
+  shouldAcceptCapturePayload,
+  shouldShowExplanationAction,
   statusText,
   waitingPayload,
 } from "./overlayState";
@@ -28,6 +31,7 @@ import {
   LOADING_OVERLAY_WIDTH,
   MATERIALIZE_SAFETY_PADDING_MS,
   readWindowGeometry,
+  shouldAnimateLoadingResult,
   type WindowGeometry,
 } from "./overlayMotion";
 import {
@@ -36,9 +40,22 @@ import {
   type MotionState,
 } from "./motionMachine";
 import {
+  applyExplanationFailure,
+  applyExplanationResult,
+  beginExplanationLoad,
+  developmentExplanationPreview,
+  explanationErrorMessage,
+  formatExplanationForCopy,
+  idleExplanationLoadState,
+  shouldStartExplanationLoad,
+  type ExplanationLoadState,
+} from "./explanationState";
+import {
   acknowledgeCapture,
   copyTranslation as copyTranslationToClipboard,
   dismissOverlay,
+  explainTranslation,
+  cancelExplanation,
   fitOverlayHeight,
   getLatestCapture,
   notifyOverlayFrontendReady,
@@ -52,6 +69,28 @@ import { OverlayView } from "./OverlayView";
 import "./overlay.css";
 
 const ENABLE_STAGED_REVEAL = true;
+const EXPLANATION_PANEL_HEIGHT = 292;
+const EXPLANATION_PANEL_GAP = 8;
+const EXPLANATION_REVEAL_SAFETY_TIMEOUT_MS = 520;
+const EXPLANATION_RETURN_SAFETY_TIMEOUT_MS = 260;
+
+type ExplanationPhase =
+  | "closed"
+  | "preparing"
+  | "revealing"
+  | "open"
+  | "closing"
+  | "collapsing";
+
+type ExplanationState = {
+  requestId: number | null;
+  phase: ExplanationPhase;
+};
+
+const closedExplanationState: ExplanationState = {
+  requestId: null,
+  phase: "closed",
+};
 
 type MotionDebugFrame = {
   elapsedMs: number;
@@ -78,8 +117,22 @@ export function Overlay() {
   const previewRef = useRef(developmentPreview());
   const [payload, setPayload] = useState(previewRef.current ?? waitingPayload);
   const [copiedRequestId, setCopiedRequestId] = useState<number | null>(null);
+  const retryLayoutRequestRef = useRef<number | null>(null);
+  const retryRequestRef = useRef<number | null>(null);
+  const [retryRequestId, setRetryRequestId] = useState<number | null>(null);
+  const [compactOverflowRequestId, setCompactOverflowRequestId] = useState<number | null>(null);
   const [copyFailedRequestId, setCopyFailedRequestId] = useState<number | null>(
     null,
+  );
+  const [explanationLoadState, setExplanationLoadState] =
+    useState<ExplanationLoadState>(idleExplanationLoadState);
+  const [explanationCopiedRequestId, setExplanationCopiedRequestId] = useState<
+    number | null
+  >(null);
+  const [explanationCopyFailedRequestId, setExplanationCopyFailedRequestId] =
+    useState<number | null>(null);
+  const [explanationState, setExplanationState] = useState<ExplanationState>(
+    closedExplanationState,
   );
   const [departingStatus, setDepartingStatus] = useState<{
     requestId: number;
@@ -102,22 +155,112 @@ export function Overlay() {
     initialPreviewMotion,
   );
   const payloadRef = useRef(previewRef.current ?? waitingPayload);
+  const explanationStateRef = useRef<ExplanationState>(closedExplanationState);
+  const explanationLoadStateRef = useRef<ExplanationLoadState>(
+    idleExplanationLoadState(),
+  );
+  const explanationLoadSequenceRef = useRef(0);
+  const explanationBaseHeightRef = useRef<number | null>(null);
+  const explanationSequenceRef = useRef(0);
+  const explanationFirstFrameRef = useRef(0);
+  const explanationSecondFrameRef = useRef(0);
+  const explanationTimerRef = useRef<number | undefined>(undefined);
+  const explanationCollapseRequestRef = useRef<number | null>(null);
   const motionStateRef = useRef(motionState);
   motionStateRef.current = motionState;
   const overlayRef = useRef<HTMLElement | null>(null);
+  const interactingRef = useRef(false);
+  const copyHoldRef = useRef<number | null>(null);
+  const copyHoldTimerRef = useRef<number | undefined>(undefined);
+  const copyAttemptRef = useRef(0);
+  useEffect(() => {
+    copyHoldRef.current = null;
+    copyAttemptRef.current += 1;
+    window.clearTimeout(copyHoldTimerRef.current);
+    return () => {
+      copyAttemptRef.current += 1;
+      window.clearTimeout(copyHoldTimerRef.current);
+    };
+  }, [payload.requestId]);
   const loadingGeometryRef = useRef<{
     requestId: number;
     geometry: WindowGeometry;
   } | null>(null);
+  const loadingStartedRef = useRef<{ requestId: number; at: number } | null>(null);
   const pendingRevealAcknowledgementRef = useRef<number | null>(null);
   const pollingRef = useRef<(() => void) | undefined>(undefined);
   const departingStatusTimerRef = useRef<number | undefined>(undefined);
   const deliveryErrorReportedRef = useRef(false);
   const dismissCompletionRequestRef = useRef<number | null>(null);
 
+  const clearExplanationSchedule = useCallback(() => {
+    window.cancelAnimationFrame(explanationFirstFrameRef.current);
+    window.cancelAnimationFrame(explanationSecondFrameRef.current);
+    window.clearTimeout(explanationTimerRef.current);
+    explanationFirstFrameRef.current = 0;
+    explanationSecondFrameRef.current = 0;
+    explanationTimerRef.current = undefined;
+  }, []);
+
+  const commitExplanationState = useCallback((next: ExplanationState) => {
+    explanationStateRef.current = next;
+    setExplanationState(next);
+  }, []);
+
+  const commitExplanationLoadState = useCallback(
+    (next: ExplanationLoadState) => {
+      explanationLoadStateRef.current = next;
+      setExplanationLoadState(next);
+    },
+    [],
+  );
+
+  const cancelPendingExplanation = useCallback(() => {
+    const load = explanationLoadStateRef.current;
+    if (load.status !== "loading" || load.requestId === null) return;
+    const attemptId = explanationLoadSequenceRef.current;
+    explanationLoadSequenceRef.current += 1;
+    commitExplanationLoadState(idleExplanationLoadState());
+    if (!previewRef.current) {
+      void cancelExplanation(load.requestId, attemptId).catch((error) => {
+        console.error("[Translay] cancel explanation failed", error);
+      });
+    }
+  }, [commitExplanationLoadState]);
+
+  useEffect(() => () => cancelPendingExplanation(), [cancelPendingExplanation]);
+
+  const resetExplanationState = useCallback(() => {
+    cancelPendingExplanation();
+    explanationSequenceRef.current += 1;
+    explanationLoadSequenceRef.current += 1;
+    clearExplanationSchedule();
+    explanationCollapseRequestRef.current = null;
+    explanationBaseHeightRef.current = null;
+    commitExplanationState(closedExplanationState);
+    commitExplanationLoadState(idleExplanationLoadState());
+    setExplanationCopiedRequestId(null);
+    setExplanationCopyFailedRequestId(null);
+  }, [
+    cancelPendingExplanation,
+    clearExplanationSchedule,
+    commitExplanationLoadState,
+    commitExplanationState,
+  ]);
+
+  const releaseExplanationPin = useCallback((requestId: number) => {
+    if (previewRef.current) return;
+    const hovered = copyHoldRef.current === requestId || interactingRef.current || (overlayRef.current?.matches(":hover") ?? false);
+    void setOverlayHovered(requestId, hovered);
+  }, []);
+
   const reportDeliveryError = useCallback(
     (stage: string, error: unknown) => {
       console.error(`[Translay] overlay IPC failed during ${stage}`, error);
+      // A delivery/acknowledgement failure is not a translation result. Keep
+      // the last accepted request, including when an older IPC finishes late.
+      // Only an overlay that has never received a request needs this fallback.
+      if (payloadRef.current.requestId > 0) return;
       if (deliveryErrorReportedRef.current) return;
       deliveryErrorReportedRef.current = true;
       const failurePayload: CapturePayload = {
@@ -132,8 +275,11 @@ export function Overlay() {
   );
 
   const applyLatestPayload = useCallback((next: CapturePayload): boolean => {
-    if (next.requestId < payloadRef.current.requestId) return false;
+    if (!shouldAcceptCapturePayload(payloadRef.current, next)) return false;
     const current = payloadRef.current;
+    if (next.requestId > current.requestId) {
+      resetExplanationState();
+    }
     if (
       next.requestId === current.requestId &&
       motionStateRef.current.phase === "dismissing" &&
@@ -141,13 +287,22 @@ export function Overlay() {
     ) {
       return true;
     }
+    if (next.requestId > current.requestId) {
+      retryLayoutRequestRef.current = current.phase === "translationFailed" &&
+        retryRequestRef.current === current.requestId && next.phase === "translating"
+        ? next.requestId : null;
+    }
     if (shouldBridgeLoadingToResult(current, next)) {
       const loadingGeometry =
         loadingGeometryRef.current?.requestId === next.requestId
           ? loadingGeometryRef.current.geometry
           : null;
+      const animate = ENABLE_STAGED_REVEAL && shouldAnimateLoadingResult(
+        loadingStartedRef.current?.requestId === next.requestId
+          ? performance.now() - loadingStartedRef.current.at : 0,
+      );
       dispatchMotion(
-        ENABLE_STAGED_REVEAL
+        animate
           ? {
               type: "prepare",
               requestId: next.requestId,
@@ -155,7 +310,7 @@ export function Overlay() {
             }
           : { type: "settle-immediately", requestId: next.requestId },
       );
-      pendingRevealAcknowledgementRef.current = ENABLE_STAGED_REVEAL
+      pendingRevealAcknowledgementRef.current = animate
         ? next.requestId
         : null;
       window.clearTimeout(departingStatusTimerRef.current);
@@ -163,7 +318,7 @@ export function Overlay() {
         requestId: current.requestId,
         text: statusText(current),
       };
-      setDepartingStatus(bridge);
+      setDepartingStatus(animate ? bridge : null);
       departingStatusTimerRef.current = window.setTimeout(() => {
         setDepartingStatus((visible) =>
           visible?.requestId === bridge.requestId ? null : visible,
@@ -190,7 +345,7 @@ export function Overlay() {
       current === payloadRef.current.requestId ? current : null,
     );
     return true;
-  }, []);
+  }, [resetExplanationState]);
 
   useEffect(() => {
     const motionPreview = new URLSearchParams(window.location.search).get(
@@ -345,6 +500,14 @@ export function Overlay() {
     [],
   );
 
+  useEffect(
+    () => () => {
+      explanationSequenceRef.current += 1;
+      clearExplanationSchedule();
+    },
+    [clearExplanationSchedule],
+  );
+
   const acknowledgeDeliveredCapture = useCallback((requestId: number) => {
     if (pendingRevealAcknowledgementRef.current === requestId) {
       // Delivery is complete, but reading time must begin only after the
@@ -408,6 +571,17 @@ export function Overlay() {
               Number.isSafeInteger(requestId) &&
               requestId === payloadRef.current.requestId
             ) {
+              const explanation = explanationStateRef.current;
+              if (
+                copyHoldRef.current === requestId ||
+                interactingRef.current ||
+                overlayRef.current?.matches(":hover") ||
+                (explanation.requestId === requestId &&
+                  explanation.phase !== "closed")
+              ) {
+                void setOverlayHovered(requestId, true);
+                return;
+              }
               dispatchMotion({
                 type: "dismiss",
                 requestId,
@@ -463,6 +637,7 @@ export function Overlay() {
   }, []);
 
   const setHovered = useCallback((hovered: boolean) => {
+    interactingRef.current = hovered;
     const requestId = payloadRef.current.requestId;
     if (requestId > 0) {
       if (
@@ -473,7 +648,11 @@ export function Overlay() {
       ) {
         dispatchMotion({ type: "cancel-dismiss", requestId });
       }
-      void setOverlayHovered(requestId, hovered);
+      const explanation = explanationStateRef.current;
+      const keepVisible =
+        copyHoldRef.current === requestId ||
+        (explanation.requestId === requestId && explanation.phase !== "closed");
+      void setOverlayHovered(requestId, keepVisible ? true : hovered);
     }
   }, []);
 
@@ -489,41 +668,369 @@ export function Overlay() {
     dismissCompletionRequestRef.current = requestId;
     try {
       const hidden = await dismissOverlay(requestId);
+      // The native reply can arrive after a different selection has opened.
+      if (payloadRef.current.requestId !== requestId) return;
       if (hidden) {
+        resetExplanationState();
         dispatchMotion({ type: "hidden", requestId });
       } else {
         dismissCompletionRequestRef.current = null;
         dispatchMotion({ type: "settle-immediately", requestId });
       }
     } catch (error) {
-      if (previewRef.current) {
+      if (payloadRef.current.requestId !== requestId || previewRef.current) {
         return;
       }
       dismissCompletionRequestRef.current = null;
       console.error("[Translay] native overlay dismissal failed", error);
       dispatchMotion({ type: "settle-immediately", requestId });
     }
-  }, []);
+  }, [resetExplanationState]);
 
   const retry = useCallback(() => {
+    const current = payloadRef.current;
+    if (retryRequestRef.current === current.requestId ||
+        !["captureFailed", "translationFailed"].includes(current.phase)) return;
+    retryRequestRef.current = current.requestId;
+    setRetryRequestId(current.requestId);
     setCopiedRequestId(null);
     setCopyFailedRequestId(null);
-    void retryCapture();
-  }, []);
+    void retryCapture(current.requestId).then(() => syncLatestCapture()).catch(() => {
+      if (payloadRef.current.requestId !== current.requestId) return;
+      applyLatestPayload({ ...current, errorMessage: "未能开始重试，请再试一次" });
+    }).finally(() => {
+      if (retryRequestRef.current !== current.requestId) return;
+      retryRequestRef.current = null;
+      setRetryRequestId(null);
+    });
+  }, [applyLatestPayload, syncLatestCapture]);
 
   const copyTranslation = useCallback(async () => {
     const current = payloadRef.current;
     if (current.phase !== "translated" || !current.text) return;
-
+    const attempt = ++copyAttemptRef.current;
+    copyHoldRef.current = current.requestId;
+    window.clearTimeout(copyHoldTimerRef.current);
+    setHovered(interactingRef.current);
+    if (motionStateRef.current.dismissReason === "automatic") {
+      dispatchMotion({ type: "cancel-dismiss", requestId: current.requestId });
+    }
+    const stillCurrent = () =>
+      payloadRef.current.requestId === current.requestId &&
+      copyAttemptRef.current === attempt;
     try {
       await copyTranslationToClipboard(current.text);
+      if (!stillCurrent()) return;
       setCopyFailedRequestId(null);
       setCopiedRequestId(current.requestId);
     } catch {
+      if (!stillCurrent()) return;
       setCopiedRequestId(null);
       setCopyFailedRequestId(current.requestId);
+    } finally {
+      if (stillCurrent()) {
+        // Give both success and failure feedback a full second after IPC settles.
+        copyHoldTimerRef.current = window.setTimeout(() => {
+          if (!stillCurrent()) return;
+          copyHoldRef.current = null;
+          setHovered(interactingRef.current);
+        }, 1_000);
+      }
+    }
+  }, [setHovered]);
+
+  const requestExplanation = useCallback(
+    (requestId: number, force = false) => {
+      const currentPayload = payloadRef.current;
+      if (
+        currentPayload.requestId !== requestId ||
+        !shouldShowExplanationAction(currentPayload)
+      ) {
+        return;
+      }
+      const currentLoad = explanationLoadStateRef.current;
+      if (!force && !shouldStartExplanationLoad(currentLoad, requestId)) {
+        return;
+      }
+
+      const sequence = Math.max(Date.now(), explanationLoadSequenceRef.current + 1);
+      explanationLoadSequenceRef.current = sequence;
+      commitExplanationLoadState(beginExplanationLoad(requestId));
+      setExplanationCopiedRequestId(null);
+      setExplanationCopyFailedRequestId(null);
+
+      const load = previewRef.current
+        ? Promise.resolve(developmentExplanationPreview)
+        : explainTranslation(requestId, sequence);
+      void load
+        .then((content) => {
+          if (explanationLoadSequenceRef.current !== sequence) return;
+          const currentRequestId = payloadRef.current.requestId;
+          if (content === null) {
+            const failed = applyExplanationFailure(
+              explanationLoadStateRef.current,
+              currentRequestId,
+              requestId,
+              "当前译文已失效，请重新划词",
+            );
+            if (failed !== explanationLoadStateRef.current) {
+              commitExplanationLoadState(failed);
+            }
+            return;
+          }
+          const resolved = applyExplanationResult(
+            explanationLoadStateRef.current,
+            currentRequestId,
+            requestId,
+            content,
+          );
+          if (resolved !== explanationLoadStateRef.current) {
+            commitExplanationLoadState(resolved);
+          }
+        })
+        .catch((error) => {
+          if (explanationLoadSequenceRef.current !== sequence) return;
+          const failed = applyExplanationFailure(
+            explanationLoadStateRef.current,
+            payloadRef.current.requestId,
+            requestId,
+            explanationErrorMessage(error),
+          );
+          if (failed !== explanationLoadStateRef.current) {
+            commitExplanationLoadState(failed);
+          }
+        });
+    },
+    [commitExplanationLoadState],
+  );
+
+  const retryExplanation = useCallback(() => {
+    const requestId = payloadRef.current.requestId;
+    requestExplanation(requestId, true);
+  }, [requestExplanation]);
+
+  const copyExplanation = useCallback(async () => {
+    const current = explanationLoadStateRef.current;
+    if (
+      current.status !== "ready" ||
+      current.requestId !== payloadRef.current.requestId ||
+      current.content === null
+    ) {
+      return;
+    }
+
+    try {
+      await copyTranslationToClipboard(formatExplanationForCopy(current.content));
+      setExplanationCopyFailedRequestId(null);
+      setExplanationCopiedRequestId(current.requestId);
+    } catch {
+      setExplanationCopiedRequestId(null);
+      setExplanationCopyFailedRequestId(current.requestId);
     }
   }, []);
+
+  const completeExplanationReveal = useCallback(
+    (requestId: number) => {
+      const explanation = explanationStateRef.current;
+      if (
+        explanation.requestId !== requestId ||
+        explanation.phase !== "revealing"
+      ) {
+        return;
+      }
+      window.clearTimeout(explanationTimerRef.current);
+      explanationTimerRef.current = undefined;
+      commitExplanationState({ requestId, phase: "open" });
+    },
+    [commitExplanationState],
+  );
+
+  const completeExplanationCollapse = useCallback(
+    (requestId: number) => {
+      const explanation = explanationStateRef.current;
+      if (
+        explanation.requestId !== requestId ||
+        (explanation.phase !== "closing" &&
+          explanation.phase !== "collapsing") ||
+        explanationCollapseRequestRef.current === requestId
+      ) {
+        return;
+      }
+
+      const baseHeight = explanationBaseHeightRef.current;
+      explanationCollapseRequestRef.current = requestId;
+      clearExplanationSchedule();
+      const collapse =
+        previewRef.current || baseHeight === null
+          ? Promise.resolve(true)
+          : fitOverlayHeight(requestId, baseHeight, true);
+
+      void collapse
+        .catch((error) => {
+          console.error(
+            "[Translay] explanation preview collapse failed",
+            error,
+          );
+          return false;
+        })
+        .finally(() => {
+          if (explanationCollapseRequestRef.current !== requestId) return;
+          explanationCollapseRequestRef.current = null;
+          const latest = explanationStateRef.current;
+          if (
+            latest.requestId === requestId &&
+            (latest.phase === "closing" || latest.phase === "collapsing")
+          ) {
+            explanationBaseHeightRef.current = null;
+            commitExplanationState(closedExplanationState);
+            releaseExplanationPin(requestId);
+          }
+        });
+    },
+    [
+      clearExplanationSchedule,
+      commitExplanationState,
+      releaseExplanationPin,
+    ],
+  );
+
+  const closeExplanation = useCallback(() => {
+    const explanation = explanationStateRef.current;
+    if (
+      explanation.requestId === null ||
+      explanation.phase === "closed" ||
+      explanation.phase === "closing" ||
+      explanation.phase === "collapsing"
+    ) {
+      return;
+    }
+
+    cancelPendingExplanation();
+    explanationSequenceRef.current += 1;
+    clearExplanationSchedule();
+    if (explanation.phase === "preparing") {
+      commitExplanationState({
+        requestId: explanation.requestId,
+        phase: "collapsing",
+      });
+      completeExplanationCollapse(explanation.requestId);
+      return;
+    }
+
+    const requestId = explanation.requestId;
+    commitExplanationState({
+      requestId,
+      phase: "closing",
+    });
+    explanationTimerRef.current = window.setTimeout(
+      () => completeExplanationCollapse(requestId),
+      EXPLANATION_RETURN_SAFETY_TIMEOUT_MS,
+    );
+  }, [
+    cancelPendingExplanation,
+    clearExplanationSchedule,
+    commitExplanationState,
+    completeExplanationCollapse,
+  ]);
+
+  const toggleExplanation = useCallback(() => {
+    const current = payloadRef.current;
+    if (!shouldShowExplanationAction(current)) return;
+    const explanation = explanationStateRef.current;
+    if (
+      explanation.requestId === current.requestId &&
+      explanation.phase !== "closed"
+    ) {
+      closeExplanation();
+      return;
+    }
+
+    const baseHeight = previewRef.current
+      ? Math.min(window.innerHeight, 150)
+      : window.innerHeight;
+    const sequence = explanationSequenceRef.current + 1;
+    explanationSequenceRef.current = sequence;
+    clearExplanationSchedule();
+    explanationCollapseRequestRef.current = null;
+    explanationBaseHeightRef.current = baseHeight;
+    commitExplanationState({
+      requestId: current.requestId,
+      phase: "preparing",
+    });
+    requestExplanation(current.requestId);
+
+    const fit = previewRef.current
+      ? Promise.resolve(true)
+      : fitOverlayHeight(
+          current.requestId,
+          baseHeight + EXPLANATION_PANEL_GAP + EXPLANATION_PANEL_HEIGHT,
+          true,
+        );
+    if (!previewRef.current) {
+      void setOverlayHovered(current.requestId, true);
+    }
+
+    void fit
+      .then((fitted) => {
+        const latest = explanationStateRef.current;
+        if (
+          explanationSequenceRef.current !== sequence ||
+          latest.requestId !== current.requestId ||
+          latest.phase !== "preparing"
+        ) {
+          return;
+        }
+        if (!fitted) {
+          resetExplanationState();
+          releaseExplanationPin(current.requestId);
+          return;
+        }
+
+        explanationFirstFrameRef.current = window.requestAnimationFrame(() => {
+          overlayRef.current?.getBoundingClientRect();
+          explanationSecondFrameRef.current = window.requestAnimationFrame(
+            () => {
+              const ready = explanationStateRef.current;
+              if (
+                explanationSequenceRef.current !== sequence ||
+                ready.requestId !== current.requestId ||
+                ready.phase !== "preparing"
+              ) {
+                return;
+              }
+              commitExplanationState({
+                requestId: current.requestId,
+                phase: "revealing",
+              });
+              explanationTimerRef.current = window.setTimeout(
+                () => completeExplanationReveal(current.requestId),
+                EXPLANATION_REVEAL_SAFETY_TIMEOUT_MS,
+              );
+            },
+          );
+        });
+      })
+      .catch((error) => {
+        console.error("[Translay] explanation preview expansion failed", error);
+        const latest = explanationStateRef.current;
+        if (
+          explanationSequenceRef.current === sequence &&
+          latest.requestId === current.requestId &&
+          latest.phase === "preparing"
+        ) {
+          resetExplanationState();
+          releaseExplanationPin(current.requestId);
+        }
+      });
+  }, [
+    clearExplanationSchedule,
+    closeExplanation,
+    commitExplanationState,
+    completeExplanationReveal,
+    releaseExplanationPin,
+    requestExplanation,
+    resetExplanationState,
+  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -539,10 +1046,33 @@ export function Overlay() {
   const isTranslated = payload.phase === "translated";
   const isLoading =
     payload.phase === "capturing" || payload.phase === "translating";
+  const explanationPhase: ExplanationPhase =
+    explanationState.requestId === payload.requestId &&
+    shouldShowExplanationAction(payload)
+      ? explanationState.phase
+      : "closed";
+  const explanationExpanded = explanationPhase !== "closed";
   const isCompact =
     isTranslated &&
+    compactOverflowRequestId !== payload.requestId &&
+    !conversationalToneNote(payload) &&
     !payload.text.includes("\n") &&
     Array.from(payload.text).length <= 18;
+  useLayoutEffect(() => {
+    if (!isCompact || payload.translationMode !== "conversational") return;
+    const translation = overlayRef.current?.querySelector<HTMLElement>(".translation");
+    if (!translation) return;
+    const checkWidth = () => {
+      if (translation.clientWidth > 0 && translation.scrollWidth > translation.clientWidth + 1) {
+        setCompactOverflowRequestId(payload.requestId);
+      }
+    };
+    checkWidth();
+    const observer = new ResizeObserver(checkWidth);
+    observer.observe(translation);
+    return () => observer.disconnect();
+  }, [isCompact, payload.requestId, payload.text, payload.translationMode]);
+
   const copied = copiedRequestId === payload.requestId;
   const copyFailed = copyFailedRequestId === payload.requestId;
   const activeMotionPhase =
@@ -574,10 +1104,16 @@ export function Overlay() {
     "--motion-materialize": `${materializeTiming.durationMs}ms`,
     "--motion-delay-content": `${materializeTiming.contentDelayMs}ms`,
     "--motion-delay-controls": `${materializeTiming.controlsDelayMs}ms`,
+    "--translation-overlay-height": `${
+      explanationBaseHeightRef.current ?? window.innerHeight
+    }px`,
   } as CSSProperties;
 
   useLayoutEffect(() => {
     if (!isLoading || payload.requestId === 0) return;
+    if (loadingStartedRef.current?.requestId !== payload.requestId) {
+      loadingStartedRef.current = { requestId: payload.requestId, at: performance.now() };
+    }
     const geometry = readWindowGeometry(window);
     const previewMode = new URLSearchParams(window.location.search).get(
       "preview",
@@ -595,10 +1131,11 @@ export function Overlay() {
           }
         : geometry,
     };
-  }, [isLoading, payload.requestId]);
+  }, [isLoading, payload.requestId, payload.phase]);
 
   const measureDesiredHeight = useCallback((): number | null => {
-    const overlay = overlayRef.current;
+    const overlay =
+      overlayRef.current?.querySelector<HTMLElement>(".overlay") ?? null;
     const header = overlay?.querySelector<HTMLElement>(".overlay-header");
     const translation = overlay?.querySelector<HTMLElement>(".translation");
     const status = overlay?.querySelector<HTMLElement>(".status");
@@ -733,6 +1270,7 @@ export function Overlay() {
       previewRef.current ||
       payload.requestId === 0 ||
       isLoading ||
+      explanationExpanded ||
       activeMotionPhase !== "settled"
     ) {
       return;
@@ -744,7 +1282,9 @@ export function Overlay() {
         desiredHeight !== null &&
         Math.abs(window.innerHeight - desiredHeight) > 2
       ) {
-        void fitOverlayHeight(payload.requestId, desiredHeight);
+        // Once readable, keep its current position; native code still clamps
+        // the resized surface to the monitor's work area when necessary.
+        void fitOverlayHeight(payload.requestId, desiredHeight, true);
       }
     };
     const timers = [
@@ -755,6 +1295,7 @@ export function Overlay() {
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [
     activeMotionPhase,
+    explanationExpanded,
     isLoading,
     measureDesiredHeight,
     payload.phase,
@@ -772,8 +1313,18 @@ export function Overlay() {
       isTranslated={isTranslated}
       isFailure={isFailure}
       isLoading={isLoading}
+      retainRetryLayout={retryLayoutRequestRef.current === payload.requestId && isLoading}
       copied={copied}
       copyFailed={copyFailed}
+      retryPending={retryRequestId === payload.requestId}
+      explanationPhase={explanationPhase}
+      explanationLoadState={explanationLoadState}
+      explanationCopied={
+        explanationCopiedRequestId === payload.requestId
+      }
+      explanationCopyFailed={
+        explanationCopyFailedRequestId === payload.requestId
+      }
       departingStatusText={
         departingStatus?.requestId === payload.requestId
           ? departingStatus.text
@@ -793,6 +1344,18 @@ export function Overlay() {
         }
       }}
       onCopy={() => void copyTranslation()}
+      onToggleExplanation={toggleExplanation}
+      onCloseExplanation={closeExplanation}
+      onCopyExplanation={() => void copyExplanation()}
+      onRetryExplanation={retryExplanation}
+      onExplanationAnimationEnd={(event) => {
+        if (event.currentTarget !== event.target) return;
+        if (explanationPhase === "revealing") {
+          completeExplanationReveal(payload.requestId);
+        } else if (explanationPhase === "closing") {
+          completeExplanationCollapse(payload.requestId);
+        }
+      }}
       onRetry={retry}
       onDismiss={dismiss}
     />

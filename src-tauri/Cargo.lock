@@ -3919,7 +3919,7 @@ dependencies = [
 
 [[package]]
 name = "translay"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "reqwest 0.12.28",
  "serde",
@@ -3928,6 +3928,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-global-shortcut",
  "thiserror 2.0.19",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "windows",

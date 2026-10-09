@@ -4,6 +4,7 @@ import {
   MouseEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -21,6 +22,7 @@ import {
   applySavedProviderConfig,
   applyTranslationPreferences,
   connectionFeedbackMessage,
+  connectionErrorMessage,
   draftSignature,
   hasUnsavedProviderChanges,
   isEditingActiveConfiguration,
@@ -53,6 +55,7 @@ import {
   type SettingsSection,
   type SettingsStatus,
 } from "./SettingsView";
+import "../shared/uiFonts";
 import "./settings.css";
 
 const initialConfig: ModelConfigView = {
@@ -90,6 +93,9 @@ export function Settings() {
   const statusFeedbackTimer = useRef<number | null>(null);
   const apiKeyStatusRequest = useRef(0);
   const localModelDetectionRequest = useRef(0);
+  const connectionTestRequest = useRef(0);
+  const connectionTestInFlight = useRef(false);
+  const connectionViewMounted = useRef(false);
   const [activeHealth, setActiveHealth] =
     useState<ConnectionHealth>("idle");
   const [testedDraft, setTestedDraft] = useState<{
@@ -105,7 +111,39 @@ export function Settings() {
     message: "",
   });
 
+  const invalidateConnectionTest = useCallback(() => {
+    connectionTestRequest.current += 1;
+    connectionTestInFlight.current = false;
+    setTestedDraft(null);
+    setConnectionStatus({ kind: "idle", message: "" });
+    setActiveHealth((current) => current === "working" ? "idle" : current);
+  }, []);
+
+  const testSignature = draftSignature({ ...config, apiKey: apiKey.trim() || null });
+  const testApiKey = config.backend === "api" ? apiKey.trim() : "";
+  const activeSignature = activeConfig
+    ? draftSignature({ ...activeConfig, apiKey: null })
+    : null;
+  const connectionContext = useRef({ testSignature, testApiKey, activeSignature });
+
+  useLayoutEffect(() => {
+    connectionViewMounted.current = true;
+    return () => {
+      connectionViewMounted.current = false;
+      connectionTestRequest.current += 1;
+      connectionTestInFlight.current = false;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    connectionContext.current = { testSignature, testApiKey, activeSignature };
+    // Also covers input changes from existing asynchronous model detection/save.
+    // Compare a new key in memory: draftSignature deliberately contains no secret.
+    invalidateConnectionTest();
+  }, [testSignature, testApiKey, activeSignature, invalidateConnectionTest]);
+
   const load = useCallback(async () => {
+    invalidateConnectionTest();
     try {
       const next = await getModelConfig();
       setConfig(next);
@@ -118,7 +156,7 @@ export function Settings() {
     } catch (error) {
       setStatus({ kind: "error", message: String(error) });
     }
-  }, []);
+  }, [invalidateConnectionTest]);
 
   useEffect(() => {
     void load();
@@ -129,6 +167,7 @@ export function Settings() {
     let stopListening: (() => void) | undefined;
 
     void onModelBackendChanged((payload) => {
+      invalidateConnectionTest();
       setActiveConfig(payload);
       setConfig((current) => ({
         ...current,
@@ -161,7 +200,7 @@ export function Settings() {
       disposed = true;
       stopListening?.();
     };
-  }, [load]);
+  }, [load, invalidateConnectionTest]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -228,6 +267,7 @@ export function Settings() {
       return;
     }
     localModelDetectionRequest.current += 1;
+    invalidateConnectionTest();
     const discardingUnsavedChanges = hasUnsavedProviderChanges(
       config,
       activeConfig,
@@ -305,8 +345,7 @@ export function Settings() {
     setConfig((current) =>
       applyTranslationPreferences(current, preferences),
     );
-    setTestedDraft(null);
-    setConnectionStatus({ kind: "idle", message: "" });
+    invalidateConnectionTest();
     setStatus({ kind: "idle", message: "" });
 
     try {
@@ -349,8 +388,7 @@ export function Settings() {
       setApiKey("");
       setEditingApiKey(false);
     }
-    setTestedDraft(null);
-    setConnectionStatus({ kind: "idle", message: "" });
+    invalidateConnectionTest();
     setConfig((current) => ({
       ...current,
       ...(apiAddressChanged
@@ -380,8 +418,7 @@ export function Settings() {
       setEditingApiKey(false);
       void refreshApiKeyStatus(next.api.baseUrl);
     }
-    setTestedDraft(null);
-    setConnectionStatus({ kind: "idle", message: "" });
+    invalidateConnectionTest();
     setSaveConfirmed(false);
     setStatus({ kind: "idle", message: "" });
 
@@ -504,8 +541,24 @@ export function Settings() {
   };
 
   const handleTest = async () => {
+    if (
+      !loaded ||
+      modelSaving ||
+      modelSwitching ||
+      translationSaving ||
+      connectionTestInFlight.current
+    ) {
+      return;
+    }
     const input = buildInput();
     const signature = draftSignature(input);
+    const request = ++connectionTestRequest.current;
+    connectionTestInFlight.current = true;
+    const currentRequest = () =>
+      connectionViewMounted.current &&
+      request === connectionTestRequest.current &&
+      signature === connectionContext.current.testSignature &&
+      (input.backend !== "api" || (input.apiKey ?? "") === connectionContext.current.testApiKey);
     const testingActive =
       activeConfig !== null &&
       isEditingActiveConfiguration(config, activeConfig) &&
@@ -517,9 +570,10 @@ export function Settings() {
     }
     try {
       const result = await testModelConnection(input);
+      if (!currentRequest()) return;
       const health = result.success ? "success" : "error";
       setTestedDraft({ signature, health });
-      if (testingActive) {
+      if (testingActive && activeSignature === connectionContext.current.activeSignature) {
         setActiveHealth(health);
       }
       setConnectionStatus({
@@ -527,15 +581,21 @@ export function Settings() {
         message: connectionFeedbackMessage(result),
       });
     } catch (error) {
+      if (!currentRequest()) return;
       setTestedDraft({ signature, health: "error" });
-      if (testingActive) {
+      if (testingActive && activeSignature === connectionContext.current.activeSignature) {
         setActiveHealth("error");
       }
-      setConnectionStatus({ kind: "error", message: String(error) });
+      setConnectionStatus({ kind: "error", message: connectionErrorMessage(error) });
+    } finally {
+      if (request === connectionTestRequest.current) {
+        connectionTestInFlight.current = false;
+      }
     }
   };
 
   const clearApiKey = async () => {
+    invalidateConnectionTest();
     try {
       const baseUrl = config.api.baseUrl;
       const next = await clearModelApiKey(baseUrl);
@@ -590,8 +650,7 @@ export function Settings() {
 
   const updateApiKey = (value: string) => {
     setApiKey(value);
-    setTestedDraft(null);
-    setConnectionStatus({ kind: "idle", message: "" });
+    invalidateConnectionTest();
   };
 
   const finishApiKeyEdit = () => {
@@ -602,8 +661,7 @@ export function Settings() {
 
   const setTimeoutSeconds = (timeoutSeconds: number) => {
     setConfig((current) => ({ ...current, timeoutSeconds }));
-    setTestedDraft(null);
-    setConnectionStatus({ kind: "idle", message: "" });
+    invalidateConnectionTest();
   };
 
   const providerPreset = providerPresetForConfig(config);

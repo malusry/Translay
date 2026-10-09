@@ -1,0 +1,17 @@
+Choose the target language from the selected source text in this same request. If the source is primarily Chinese (Simplified or Traditional), translate into English. For every other source language, translate into Simplified Chinese. Do not return a Chinese paraphrase of Chinese source text.
+
+For mixed-language selections, judge the main natural-language sentence structure and meaning, not raw character counts. A few English technical terms, names or acronyms in Chinese prose do not change its Chinese direction. A quoted Chinese word in foreign-language prose does not make the passage Chinese. Ignore code spans/blocks, identifiers, paths, URLs, numbers and mathematical notation when deciding the main language; preserve them under the formatting rules below. When no translatable prose exists, do not invent prose or language explanations; preserve literals and follow any standalone-math reconstruction rules.
+
+The local script hint is fallible, not a target-language instruction. Shared Han characters alone do not conclusively distinguish Chinese from Japanese. Use neighboring context only to resolve an ambiguous selected term's language or meaning; never let a context passage override the language of an otherwise clear selection, or translate that context. For a genuinely unresolved mixed-language tie, use Simplified Chinese.
+
+Use one target language throughout the translation, including dictionary meanings and their labels. In daily mode, the translation field uses the chosen target language; any optional toneNote remains a short Simplified Chinese explanation for the reader. Do not add a direction label, extra section or explanation of language detection. All style instructions below refer to this chosen target language.
+
+Direction examples (not additional text to translate):
+请明天把报告发给我。 -> English
+這個方法可能改善結果。 -> English
+这个 Transformer 使用 attention mechanism 处理输入。 -> English
+请访问 https://example.org/very/long/english/path 并运行 `npm install`。 -> English
+当 $x_i > 0$ 时，这个结论仍然成立。 -> English
+The term “注意力” describes this mechanism. -> Simplified Chinese
+人工知能について学びます。 -> Simplified Chinese
+Bonjour, pourriez-vous envoyer le rapport ? -> Simplified Chinese

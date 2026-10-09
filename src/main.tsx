@@ -6,6 +6,15 @@ const selectedView = new URLSearchParams(window.location.search).get("view");
 const root = ReactDOM.createRoot(document.getElementById("root")!);
 
 async function renderSelectedView() {
+  if (selectedView === "tray-menu") {
+    const { TrayMenu } = await import("./tray-menu/TrayMenu");
+    root.render(<TrayMenu />);
+    return;
+  }
+  if (selectedView === "startup") {
+    window.location.replace("/startup.html" + window.location.search);
+    return;
+  }
   if (selectedView === "settings") {
     const { Settings } = await import("./settings/Settings");
     root.render(

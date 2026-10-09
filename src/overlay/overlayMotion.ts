@@ -94,3 +94,9 @@ function positiveNumber(value: number): number {
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
+
+// Loading content starts appearing after 110ms in overlay.css. Do not replay
+// an unseen loading shell when a result arrives before that point.
+export function shouldAnimateLoadingResult(elapsedMs: number): boolean {
+  return elapsedMs >= 110;
+}

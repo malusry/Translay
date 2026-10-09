@@ -5,7 +5,7 @@
 
 Translay 是一款面向 Windows 的开源划词翻译工具。应用启动后驻留系统托盘；用户在其他应用中选中文字并按 `Ctrl+Shift+T`，Translay 会优先通过 Windows UI Automation 读取选区，必要时执行一次受控的 `Ctrl+C` 回退，然后在鼠标或选区附近显示不抢焦点的极简翻译浮层。
 
-当前版本为 0.4.0，支持 OpenAI-compatible 本地/API 模型配置与翻译调用；暂不包含 OCR、自动选区监控、历史记录或账户系统。
+当前版本为 0.5.0，支持划词图标与全局快捷键翻译、本地/API 模型配置、日常／学习模式和详细解释；暂不包含 OCR、持久化历史记录或账户系统。本版更新见 [v0.5.0 发布说明](docs/releases/v0.5.0.md)。
 
 ## 环境要求
 
@@ -25,7 +25,7 @@ Translay 是一款面向 Windows 的开源划词翻译工具。应用启动后�
 
 普通用户可以从
 [GitHub Releases](https://github.com/malusry/Translay/releases)
-下载 Windows `setup.exe` 安装程序。当前 Beta 安装包尚未进行商业代码签名，
+下载 Windows `setup.exe` 安装程序。安装包尚未进行商业代码签名，
 Windows 可能显示来源未知提示；请只从本仓库下载。
 
 从源码运行时，在项目根目录执行：
@@ -34,6 +34,17 @@ Windows 可能显示来源未知提示；请只从本仓库下载。
 npm.cmd install
 npm.cmd run app:dev
 ```
+
+需要直接双击试用完整开发版时，在项目根目录构建带前端资源的 Debug 程序：
+
+```powershell
+npx.cmd tauri build --debug --no-bundle
+.\src-tauri\target\debug\translay.exe
+```
+
+正常启动这个程序会使用现有配置并运行完整功能。先从托盘退出其他正常实例，
+否则单实例保护可能激活原来的程序。`tools/tray-menu-manual.cmd` 是使用虚拟模型的
+隔离托盘验收入口，只支持部分操作，不能替代完整开发版。
 
 生成 NSIS 安装包和正式可执行文件：
 
@@ -45,19 +56,24 @@ npm.cmd run app:build
 安装包生成在 `src-tauri\target\release\bundle\nsis\`。如果只需要未打包的
 可执行文件，可以运行 `npm.cmd run app:build:exe`。
 
-项目只使用 `src-tauri\target` 作为 Rust 构建目录，并以
-`src-tauri\target\release\translay.exe` 作为唯一成品入口。不要直接保留或运行
-其他 `target-*` 目录中的程序，以免误开旧版本。
+项目只使用 `src-tauri\target` 作为 Rust 构建目录。日常开发与试用统一使用
+`src-tauri\target\debug\translay.exe`，正式构建使用
+`src-tauri\target\release\translay.exe`。不要直接保留或运行其他 `target-*` 目录中的
+程序，以免误开旧版本。2026-10-09 起不再维护额外的本地候选副本；原候选目录已清理，
+此前构建信息保留为 [历史记录](docs/local-candidate.md)。
 
 启动成功后没有普通主窗口，托盘中会出现 Translay。退出请使用设置页左下角
 或托盘菜单中的“彻底退出 Translay”。
 
 使用方式：
 
+托盘左键单击切换「划词图标」开关，快速双击切换日常／学习模式；右键打开菜单。单击会等待系统双击间隔确认，双击不会同时改变划词开关。关闭划词图标仍可用 `Ctrl+Shift+T` 翻译。
+
 1. 右键 Translay 托盘图标，打开“配置”。
-2. 选择口语或学术风格，并配置本地模型或 API。
+2. 选择日常或学习模式，并配置本地模型或 API。
 3. 保存后可使用“测试连接”确认模型服务能够响应。
 4. 在目标应用中选中非敏感文字，按 `Ctrl+Shift+T`。
+   每次重新启动 Translay 时，“划词图标”默认开启，托盘显示开启图案且菜单勾选。取消勾选后，本次运行的普通选区不会自动读取或显示图标，仍可用 `Ctrl+Shift+T` 翻译当前选区；重开配置窗口不会重新开启，退出后再次启动则恢复开启。
 5. 浮层先显示“翻译中”，模型返回后显示中文译文。
 6. 译文按有效字符数停留：0–32 个字符约 3 秒，33–80 个字符约 5 秒，
    更长内容约 7 秒；鼠标进入浮层后暂停原计时，离开后重新停留约 3 秒。
@@ -128,8 +144,10 @@ Rust 格式、编译和测试检查。
 
 若本地无法访问 crates.io，可仅为当前命令指定可信镜像，不必把镜像写进项目配置。
 
-正式发布由 [`.github/workflows/release.yml`](.github/workflows/release.yml)
-在 Windows runner 上生成 NSIS 安装包，并先创建为 GitHub 草稿 Release。
+可通过 [`.github/workflows/release.yml`](.github/workflows/release.yml)
+在 Windows runner 上检查并生成 NSIS 安装包、创建 GitHub 草稿 Release，验证后再发布。
+本地发布使用同一 `app:build` 命令；版本、源码标签、检查结果与上传产物必须一致。
+生成的验收日志和截图保留在本地 `tests/artifacts/`，不提交机器信息、配置、凭据或编译缓存。
 
 ## 代码结构
 

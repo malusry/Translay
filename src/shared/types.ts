@@ -40,4 +40,17 @@ export interface CapturePayload {
   warningCode: string | null;
   languageProfile: LanguageProfile | null;
   translationMode: TranslationMode | null;
+  toneNote?: string | null;
+}
+
+export interface ExplanationTerm {
+  term: string;
+  translation: string;
+  explanation: string;
+}
+
+export interface ExplanationContent {
+  coreExplanation: string;
+  keyConcepts: ExplanationTerm[];
+  caveat: string;
 }

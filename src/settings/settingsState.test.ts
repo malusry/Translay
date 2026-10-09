@@ -9,6 +9,7 @@ import {
   applySavedProviderConfig,
   applyTranslationPreferences,
   connectionFeedbackMessage,
+  connectionErrorMessage,
   draftSignature,
   hasUnsavedProviderChanges,
   isEditingActiveConfiguration,
@@ -260,7 +261,24 @@ describe("settings state", () => {
         message: "  连接超时  ",
         elapsedMs: 60_000,
       }),
-    ).toBe("连接超时");
+    ).toBe("连接失败 · 连接超时");
+  });
+
+  it("keeps full provider diagnostics rather than replacing them with a generic failure", () => {
+    const detail = '模型 virtual-model 不存在；HTTP 404\nrequest_id=virtual-request; ' + '原始服务端诊断。'.repeat(50);
+    expect(connectionFeedbackMessage({success:false,message:detail,elapsedMs:25}))
+      .toBe(`连接失败 · ${detail}`);
+    expect(connectionErrorMessage(new Error(detail))).toBe(`连接失败 · ${detail}`);
+    expect(connectionErrorMessage({message:"服务拒绝访问",code:"virtual_denied"}))
+      .toContain('"message":"服务拒绝访问","code":"virtual_denied"');
+  });
+
+  it("explains bare HTTP and network codes while retaining the original code", () => {
+    expect(connectionErrorMessage("HTTP 401")).toBe("连接失败 · 认证未通过，请检查 API Key（HTTP 401）");
+    expect(connectionErrorMessage("ECONNREFUSED")).toContain("确认服务已启动及地址正确（ECONNREFUSED）");
+    expect(connectionErrorMessage("HTTP 503")).toContain("服务端暂时无法处理请求（HTTP 503）");
+    expect(connectionErrorMessage("HTTP 404：virtual-model 不存在")).toBe("连接失败 · HTTP 404：virtual-model 不存在");
+    expect(connectionErrorMessage(" ")).toBe("连接失败，未收到可用的错误信息");
   });
 
   it("describes exact, minimum and fixed reasoning behavior honestly", () => {

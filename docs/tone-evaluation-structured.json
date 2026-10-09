@@ -1,0 +1,754 @@
+{
+  "date": "2026-09-09T03:46:13.257486+00:00",
+  "model": "deepseek-v4-flash",
+  "reasoningEnabled": false,
+  "systemPrompt": "You are Translay, a faithful translator into natural, conversational Simplified Chinese.\n\nOUTPUT\nReturn exactly one JSON object: {\"translation\":\"...\",\"toneNote\":null}. translation must be a nonempty string; toneNote may instead be one short plain Chinese sentence of at most 48 characters. Escape paragraph breaks inside JSON strings. No Markdown fences or text outside the object. Do not wrap the translation itself in extra quotation marks. The translation field contains only the translation or dictionary entry, never a separate explanation.\n\nCHOOSE THE RIGHT READING\nUse dictionary format only for an isolated vocabulary headword or lexical noun phrase, such as bank, track, run or machine learning. Output one to five common established senses, one numbered line per sense in translation, with an optional useful part-of-speech label. Order common meanings first; use fewer senses when unsure rather than adding rare or overly broad meanings. No examples, headings, pronunciation or usage notes. toneNote must be null for dictionary entries.\n\nOtherwise translate the entire utterance. Full sentences, conversational replies and conventional idioms are NOT dictionary queries, even when short. Treat Fine., Great. and Sure. as replies. Treat That tracks., I'm down for pizza. and Let's call it a day. as whole expressions. Do not enumerate their component words or multiple sentence paraphrases as dictionary senses.\n\nTRANSLATION FIDELITY\nInterpret the source from the perspective of a native speaker in its own language community, including contemporary everyday and online usage supported by the text. Preserve source-culture imagery, social roles, humor, irony, register, emotional intensity and community-specific terminology. Use clear, natural Chinese as the medium of understanding, but do not replace a culture-specific expression with a Chinese meme, idiom or cultural reference merely to sound familiar. When no direct Chinese equivalent exists, use a concise meaning-first rendering; retain a distinctive original term in parentheses only when it materially improves understanding. Preserve names, facts, code, URLs, necessary technical terms, paragraph boundaries, negation and uncertainty. Avoid word-for-word translation, forced domestication and unsupported trendy slang.\n\nPreserve what is unspecified: declining an offer does not tell you whether it concerns an outing, a job, an object or another proposal. Keep the refusal equally general. For explicit sarcasm, convey the contrast in the source naturally; do not add another assertion or invented reply. Never invent circumstances or reasons to make the translation sound fluent.\n\nOPTIONAL NOTE\nDefault toneNote to null. Add a note only if it contributes a useful reading cue beyond the translation, such as how an idiom signals agreement or how indirect wording softens a request. Describe the observable function, not the speaker's hidden emotional state. Prefer 12–28 Chinese characters, one sentence, no heading, examples, Markdown or line breaks. Do not repeat the content of the translation. Omit generic judgments about an expression being light, natural, friendly or casual.\n\nOrdinary facts, ordinary instructions and dictionary entries need no note. Bare replies such as Fine., Great., Sure. and OK. lack enough context to infer reluctance or sarcasm, so use null. A polite request does not by itself show anger or dissatisfaction. Explicit disagreement supports a reserved opinion, but does not prove coercion or anger. Explicit sarcastic contrast supports irony, but does not prove self-mockery or helplessness. A note is optional even in these supported cases if the translation already makes the function clear. When unsure, use null.\n\nExamples of the response format:\nbank → {\"translation\":\"1. [名词] 银行\\n2. [名词] 河岸\",\"toneNote\":null}\nThat tracks. → {\"translation\":\"有道理。\",\"toneNote\":\"口语中表示认可对方的判断。\"}\nThe meeting starts at three. → {\"translation\":\"会议三点开始。\",\"toneNote\":null}\n",
+  "systemPromptSha256": "27d3a52ca7bac8aff2f938dbe7da4bf715c4ee2beff0f240b26996ae4bf5cbb2",
+  "rubric": {
+    "translation": "完整保留原意、否定、数字和语用强度；惯用表达按整体翻译；普通词汇使用 1–5 行编号词典释义。",
+    "note": "附注可为空；出现时必须有原文依据，解释表达用途而非复述译文，不推断未提供的情绪或人际关系。null 类必须省略附注。",
+    "format": "严格 JSON 对象，translation 为非空字符串，toneNote 为 null 或不超过 48 字的单行字符串；不得与译文完全相同。",
+    "acceptance": "所有样例译文基本准确，零无依据情绪推断，null 类不得强加附注，格式全部通过。两次输出措辞可不同。记录可精简的说明，不用格式通过替代语义审阅。",
+    "review": "由助手按预先固定标准人工审阅，不是独立或盲法评审。示例题与未见题分别标记。"
+  },
+  "cases": [
+    {
+      "id": "fact-meeting",
+      "group": "factual",
+      "split": "main",
+      "source": "The meeting starts at three.",
+      "notePolicy": "null",
+      "priorExample": true,
+      "check": "会议三点开始，不加语气。"
+    },
+    {
+      "id": "fact-receipt",
+      "group": "factual",
+      "split": "main",
+      "source": "I sent the receipt yesterday, not today.",
+      "notePolicy": "null",
+      "check": "收据昨天发送而非今天，保留否定。"
+    },
+    {
+      "id": "fact-file",
+      "group": "factual",
+      "split": "main",
+      "source": "Please save the file as report.pdf.",
+      "notePolicy": "null",
+      "check": "保留 report.pdf；普通操作指令无需泛泛的礼貌说明。"
+    },
+    {
+      "id": "word-bank",
+      "group": "dictionary",
+      "split": "main",
+      "source": "bank",
+      "notePolicy": "null",
+      "priorExample": true,
+      "check": "编号词典，常见银行、河岸等义项；不把词典项解释成语气。"
+    },
+    {
+      "id": "word-track",
+      "group": "dictionary",
+      "split": "main",
+      "source": "track",
+      "notePolicy": "null",
+      "check": "编号常见词义，不把它当 That tracks。"
+    },
+    {
+      "id": "word-run",
+      "group": "dictionary",
+      "split": "main",
+      "source": "run",
+      "notePolicy": "null",
+      "check": "编号 1–5 项常见词义，不为凑数量创造义项。"
+    },
+    {
+      "id": "idiom-tracks",
+      "group": "idiom",
+      "split": "main",
+      "source": "That tracks.",
+      "notePolicy": "optional",
+      "priorExample": true,
+      "check": "认可/有道理，不译成追踪；附注可说明口语认可，不重复译文。"
+    },
+    {
+      "id": "idiom-down",
+      "group": "idiom",
+      "split": "main",
+      "source": "I'm down for pizza.",
+      "notePolicy": "optional",
+      "check": "愿意吃披萨，不是情绪低落；附注可说明赞同提议。"
+    },
+    {
+      "id": "idiom-day",
+      "group": "idiom",
+      "split": "main",
+      "source": "Let's call it a day.",
+      "notePolicy": "optional",
+      "check": "今天到此为止/收工，不是打电话；不添加疲惫原因。"
+    },
+    {
+      "id": "polite-quiet",
+      "group": "polite",
+      "split": "main",
+      "source": "Would you mind keeping it down?",
+      "notePolicy": "optional",
+      "check": "请求小声一些；可说明委婉请求，不能断言生气/不满。"
+    },
+    {
+      "id": "polite-file",
+      "group": "polite",
+      "split": "main",
+      "source": "I was wondering if you could send me the file.",
+      "notePolicy": "optional",
+      "check": "委婉请求发文件，非单纯描述过去思考；不推断身份关系。"
+    },
+    {
+      "id": "polite-difficult",
+      "group": "polite",
+      "split": "main",
+      "source": "That might be a bit difficult.",
+      "notePolicy": "optional",
+      "check": "保留可能/有点困难；不可断言已经拒绝。"
+    },
+    {
+      "id": "ambiguous-fine",
+      "group": "ambiguous",
+      "split": "main",
+      "source": "Fine.",
+      "notePolicy": "null",
+      "priorExample": true,
+      "check": "给出合理中性读法；不推断勉强/不耐烦/讽刺。"
+    },
+    {
+      "id": "ambiguous-great",
+      "group": "ambiguous",
+      "split": "main",
+      "source": "Great.",
+      "notePolicy": "null",
+      "priorExample": true,
+      "check": "普通肯定读法，不添加讽刺。"
+    },
+    {
+      "id": "ambiguous-sure",
+      "group": "ambiguous",
+      "split": "main",
+      "source": "Sure.",
+      "notePolicy": "null",
+      "priorExample": true,
+      "check": "当然/好的等中性肯定，不附加勉强。"
+    },
+    {
+      "id": "context-disagree",
+      "group": "supported-context",
+      "split": "main",
+      "source": "Fine, I'll do it, but I disagree.",
+      "notePolicy": "optional",
+      "check": "同意执行但保留不同意见；不夸大成愤怒/被迫。"
+    },
+    {
+      "id": "context-pass",
+      "group": "supported-context",
+      "split": "main",
+      "source": "I appreciate the offer, but I'll have to pass.",
+      "notePolicy": "optional",
+      "check": "感谢提议但拒绝，不翻译成通过考试；可说明礼貌拒绝。"
+    },
+    {
+      "id": "context-sarcasm",
+      "group": "supported-context",
+      "split": "main",
+      "source": "Yeah, right—as if I could finish a month's work in one afternoon.",
+      "notePolicy": "optional",
+      "check": "明确质疑可行性的反语，保留一个月与一下午对比；不凭空指责具体人。"
+    }
+  ],
+  "results": [
+    {
+      "id": "fact-meeting",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"会议三点开始。\",\"toneNote\":null}",
+      "output": {
+        "translation": "会议三点开始。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.353,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "fact-receipt",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"我昨天发的收据，不是今天。\",\"toneNote\":null}",
+      "output": {
+        "translation": "我昨天发的收据，不是今天。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 1.009,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "fact-file",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"请把文件保存为 report.pdf。\",\"toneNote\":null}",
+      "output": {
+        "translation": "请把文件保存为 report.pdf。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.565,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "word-bank",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"1. [名词] 银行\\n2. [名词] 河岸\",\"toneNote\":null}",
+      "output": {
+        "translation": "1. [名词] 银行\n2. [名词] 河岸",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.847,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "word-track",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"1. [名词] 轨道；小路\\n2. [名词] 跑道\\n3. [名词] 音轨；歌曲\\n4. [动词] 追踪，跟踪\\n5. [动词] 跟进（进展）\",\"toneNote\":null}",
+      "output": {
+        "translation": "1. [名词] 轨道；小路\n2. [名词] 跑道\n3. [名词] 音轨；歌曲\n4. [动词] 追踪，跟踪\n5. [动词] 跟进（进展）",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 1.072,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "word-run",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"1. [动词] 跑，奔跑\\n2. [名词] 跑步\\n3. [动词] 经营，管理\\n4. [动词] 运行，运转\\n5. [名词] 一段时期，一连串\",\"toneNote\":null}",
+      "output": {
+        "translation": "1. [动词] 跑，奔跑\n2. [名词] 跑步\n3. [动词] 经营，管理\n4. [动词] 运行，运转\n5. [名词] 一段时期，一连串",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.881,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "idiom-tracks",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"有道理。\",\"toneNote\":null}",
+      "output": {
+        "translation": "有道理。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.753,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "idiom-down",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"我赞成去吃披萨。\",\"toneNote\":\"口语中表示愿意参与某项活动。\"}",
+      "output": {
+        "translation": "我赞成去吃披萨。",
+        "toneNote": "口语中表示愿意参与某项活动。"
+      },
+      "automaticIssues": [],
+      "seconds": 0.477,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "idiom-day",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"咱们今天就到这儿吧。\",\"toneNote\":\"用于结束当天工作或活动时的提议。\"}",
+      "output": {
+        "translation": "咱们今天就到这儿吧。",
+        "toneNote": "用于结束当天工作或活动时的提议。"
+      },
+      "automaticIssues": [],
+      "seconds": 0.995,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "polite-quiet",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"麻烦您小声点，可以吗？\",\"toneNote\":null}",
+      "output": {
+        "translation": "麻烦您小声点，可以吗？",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.892,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "polite-file",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"我在想你能不能把那个文件发给我。\",\"toneNote\":null}",
+      "output": {
+        "translation": "我在想你能不能把那个文件发给我。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.903,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "polite-difficult",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"那可能会有点困难。\",\"toneNote\":null}",
+      "output": {
+        "translation": "那可能会有点困难。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.862,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "ambiguous-fine",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"可以。\",\"toneNote\":null}",
+      "output": {
+        "translation": "可以。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.86,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "ambiguous-great",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"太好了。\",\"toneNote\":null}",
+      "output": {
+        "translation": "太好了。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.851,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "ambiguous-sure",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"当然。\",\"toneNote\":null}",
+      "output": {
+        "translation": "当然。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.769,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "context-disagree",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"行吧，我来做，但我不同意。\",\"toneNote\":null}",
+      "output": {
+        "translation": "行吧，我来做，但我不同意。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.536,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "context-pass",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"多谢你的好意，不过这次就算了。\",\"toneNote\":null}",
+      "output": {
+        "translation": "多谢你的好意，不过这次就算了。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.922,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "context-sarcasm",
+      "repetition": 1,
+      "rawOutput": "{\"translation\":\"是啊，才怪——好像我能在一个下午干完一个月的活儿似的。\",\"toneNote\":\"“Yeah, right”和“as if”都表达强烈的不信与嘲讽。\"}",
+      "output": {
+        "translation": "是啊，才怪——好像我能在一个下午干完一个月的活儿似的。",
+        "toneNote": "“Yeah, right”和“as if”都表达强烈的不信与嘲讽。"
+      },
+      "automaticIssues": [],
+      "seconds": 0.892,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "fact-meeting",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"会议三点开始。\",\"toneNote\":null}",
+      "output": {
+        "translation": "会议三点开始。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.41,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "fact-receipt",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"收据我是昨天发的，不是今天。\",\"toneNote\":null}",
+      "output": {
+        "translation": "收据我是昨天发的，不是今天。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.659,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "fact-file",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"请把文件保存为 report.pdf。\",\"toneNote\":null}",
+      "output": {
+        "translation": "请把文件保存为 report.pdf。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.787,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "word-bank",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"1. [名词] 银行\\n2. [名词] 河岸\",\"toneNote\":null}",
+      "output": {
+        "translation": "1. [名词] 银行\n2. [名词] 河岸",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.58,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "word-track",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"1. [名词] 轨道，跑道\\n2. [动词] 追踪\",\"toneNote\":null}",
+      "output": {
+        "translation": "1. [名词] 轨道，跑道\n2. [动词] 追踪",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.813,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "word-run",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"1. [动词] 跑，奔跑\\n2. [动词] 经营，管理\\n3. [动词] 运行，运转\\n4. [名词] 跑步\\n5. [名词] 奔跑的距离\",\"toneNote\":null}",
+      "output": {
+        "translation": "1. [动词] 跑，奔跑\n2. [动词] 经营，管理\n3. [动词] 运行，运转\n4. [名词] 跑步\n5. [名词] 奔跑的距离",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.812,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "idiom-tracks",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"有道理。\",\"toneNote\":null}",
+      "output": {
+        "translation": "有道理。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.603,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "idiom-down",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"我同意吃披萨。\",\"toneNote\":\"口语中‘be down for’表示愿意参与某个提议。\"}",
+      "output": {
+        "translation": "我同意吃披萨。",
+        "toneNote": "口语中‘be down for’表示愿意参与某个提议。"
+      },
+      "automaticIssues": [],
+      "seconds": 1.064,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "idiom-day",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"今天就到这儿吧。\",\"toneNote\":null}",
+      "output": {
+        "translation": "今天就到这儿吧。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.626,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "polite-quiet",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"能请你小声一点吗？\",\"toneNote\":null}",
+      "output": {
+        "translation": "能请你小声一点吗？",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.506,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "polite-file",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"我刚才在想，你能不能把文件发给我。\",\"toneNote\":\"委婉请求，语气较间接礼貌。\"}",
+      "output": {
+        "translation": "我刚才在想，你能不能把文件发给我。",
+        "toneNote": "委婉请求，语气较间接礼貌。"
+      },
+      "automaticIssues": [],
+      "seconds": 0.769,
+      "manualReview": {
+        "status": "polish",
+        "note": "把礼貌过去式具象为“刚才”，时间暗示多余，译文仍能表达请求。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "polite-difficult",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"那可能有点难办。\",\"toneNote\":null}",
+      "output": {
+        "translation": "那可能有点难办。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.521,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "ambiguous-fine",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"好吧。\",\"toneNote\":null}",
+      "output": {
+        "translation": "好吧。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.552,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "ambiguous-great",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"太好了。\",\"toneNote\":null}",
+      "output": {
+        "translation": "太好了。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.861,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "ambiguous-sure",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"当然。\",\"toneNote\":null}",
+      "output": {
+        "translation": "当然。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.688,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "context-disagree",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"行，我会做的，但我不同意。\",\"toneNote\":null}",
+      "output": {
+        "translation": "行，我会做的，但我不同意。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.627,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "context-pass",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"我感谢你的提议，但我只能婉拒了。\",\"toneNote\":null}",
+      "output": {
+        "translation": "我感谢你的提议，但我只能婉拒了。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.803,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    },
+    {
+      "id": "context-sarcasm",
+      "repetition": 2,
+      "rawOutput": "{\"translation\":\"是啊，说得轻巧——我怎么可能一个下午干完一个月的活。\",\"toneNote\":null}",
+      "output": {
+        "translation": "是啊，说得轻巧——我怎么可能一个下午干完一个月的活。",
+        "toneNote": null
+      },
+      "automaticIssues": [],
+      "seconds": 0.784,
+      "manualReview": {
+        "status": "pass",
+        "note": "符合本样例预先规定的基本语义与附注标准；措辞差异允许。",
+        "reviewer": "assistant, unblinded"
+      }
+    }
+  ],
+  "summary": {
+    "responses": 36,
+    "automaticIssueResponses": 0,
+    "manualReview": {
+      "pass": 35,
+      "polish": 1
+    },
+    "noteResponses": 5,
+    "medianSeconds": 0.786
+  }
+}

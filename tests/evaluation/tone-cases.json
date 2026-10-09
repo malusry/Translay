@@ -1,0 +1,35 @@
+{
+  "rubric": {
+    "translation": "完整保留原意、否定、数字和语用强度；惯用表达按整体翻译；普通词汇使用 1–5 行编号词典释义。",
+    "note": "附注可为空；出现时必须有原文依据，解释表达用途而非复述译文，不推断未提供的情绪或人际关系。null 类必须省略附注。",
+    "format": "严格 JSON 对象，translation 为非空字符串，toneNote 为 null 或不超过 48 字的单行字符串；不得与译文完全相同。",
+    "acceptance": "所有样例译文基本准确，零无依据情绪推断，null 类不得强加附注，格式全部通过。两次输出措辞可不同。记录可精简的说明，不用格式通过替代语义审阅。",
+    "review": "由助手按预先固定标准人工审阅，不是独立或盲法评审。示例题与未见题分别标记。"
+  },
+  "cases": [
+    {"id":"fact-meeting","group":"factual","split":"main","source":"The meeting starts at three.","notePolicy":"null","priorExample":true,"check":"会议三点开始，不加语气。"},
+    {"id":"fact-receipt","group":"factual","split":"main","source":"I sent the receipt yesterday, not today.","notePolicy":"null","check":"收据昨天发送而非今天，保留否定。"},
+    {"id":"fact-file","group":"factual","split":"main","source":"Please save the file as report.pdf.","notePolicy":"null","check":"保留 report.pdf；普通操作指令无需泛泛的礼貌说明。"},
+    {"id":"word-bank","group":"dictionary","split":"main","source":"bank","notePolicy":"null","priorExample":true,"check":"编号词典，常见银行、河岸等义项；不把词典项解释成语气。"},
+    {"id":"word-track","group":"dictionary","split":"main","source":"track","notePolicy":"null","check":"编号常见词义，不把它当 That tracks。"},
+    {"id":"word-run","group":"dictionary","split":"main","source":"run","notePolicy":"null","check":"编号 1–5 项常见词义，不为凑数量创造义项。"},
+    {"id":"idiom-tracks","group":"idiom","split":"main","source":"That tracks.","notePolicy":"optional","priorExample":true,"check":"认可/有道理，不译成追踪；附注可说明口语认可，不重复译文。"},
+    {"id":"idiom-down","group":"idiom","split":"main","source":"I'm down for pizza.","notePolicy":"optional","check":"愿意吃披萨，不是情绪低落；附注可说明赞同提议。"},
+    {"id":"idiom-day","group":"idiom","split":"main","source":"Let's call it a day.","notePolicy":"optional","check":"今天到此为止/收工，不是打电话；不添加疲惫原因。"},
+    {"id":"polite-quiet","group":"polite","split":"main","source":"Would you mind keeping it down?","notePolicy":"optional","check":"请求小声一些；可说明委婉请求，不能断言生气/不满。"},
+    {"id":"polite-file","group":"polite","split":"main","source":"I was wondering if you could send me the file.","notePolicy":"optional","check":"委婉请求发文件，非单纯描述过去思考；不推断身份关系。"},
+    {"id":"polite-difficult","group":"polite","split":"main","source":"That might be a bit difficult.","notePolicy":"optional","check":"保留可能/有点困难；不可断言已经拒绝。"},
+    {"id":"ambiguous-fine","group":"ambiguous","split":"main","source":"Fine.","notePolicy":"null","priorExample":true,"check":"给出合理中性读法；不推断勉强/不耐烦/讽刺。"},
+    {"id":"ambiguous-great","group":"ambiguous","split":"main","source":"Great.","notePolicy":"null","priorExample":true,"check":"普通肯定读法，不添加讽刺。"},
+    {"id":"ambiguous-sure","group":"ambiguous","split":"main","source":"Sure.","notePolicy":"null","priorExample":true,"check":"当然/好的等中性肯定，不附加勉强。"},
+    {"id":"context-disagree","group":"supported-context","split":"main","source":"Fine, I'll do it, but I disagree.","notePolicy":"optional","check":"同意执行但保留不同意见；不夸大成愤怒/被迫。"},
+    {"id":"context-pass","group":"supported-context","split":"main","source":"I appreciate the offer, but I'll have to pass.","notePolicy":"optional","check":"感谢提议但拒绝，不翻译成通过考试；可说明礼貌拒绝。"},
+    {"id":"context-sarcasm","group":"supported-context","split":"main","source":"Yeah, right—as if I could finish a month's work in one afternoon.","notePolicy":"optional","check":"明确质疑可行性的反语，保留一个月与一下午对比；不凭空指责具体人。"},
+    {"id":"holdout-fact","group":"factual","split":"holdout","source":"The deadline is Friday at 5 p.m.\nLate submissions will not be accepted.","notePolicy":"null","check":"保留周五下午五点、拒收迟交与段落。"},
+    {"id":"holdout-word","group":"dictionary","split":"holdout","source":"charge","notePolicy":"null","check":"编号 1–5 项常见词义，不附加语气。"},
+    {"id":"holdout-short","group":"ambiguous","split":"holdout","source":"Okay.","notePolicy":"null","check":"中性肯定，无勉强/敷衍附注。"},
+    {"id":"holdout-idiom","group":"idiom","split":"holdout","source":"I'm on the fence about moving.","notePolicy":"optional","check":"对搬家犹豫，不能字面译成在篱笆上。"},
+    {"id":"holdout-polite","group":"polite","split":"holdout","source":"Could we perhaps try a different approach?","notePolicy":"optional","check":"试探提出换方法；不可断言指责别人。"},
+    {"id":"holdout-refusal","group":"supported-context","split":"holdout","source":"Thanks, but no thanks—I don't want it.","notePolicy":"optional","check":"明确拒绝而非感谢接受；可说明拒绝，不推断愤怒。"}
+  ]
+}

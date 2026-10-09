@@ -5,7 +5,9 @@
   "windows": [
     "overlay",
     "selection-button",
-    "tray-feedback"
+    "tray-feedback",
+    "tray-menu",
+    "startup"
   ],
   "permissions": [
     "core:event:allow-listen",

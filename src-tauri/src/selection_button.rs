@@ -1,31 +1,36 @@
 use std::{
     sync::{
-        Arc, Mutex,
+        Arc, Condvar, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
     time::{Duration, Instant},
 };
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tracing::{info, warn};
 use windows::Win32::{
-    Foundation::{HWND, POINT},
+    Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM},
+    Graphics::Gdi::{CombineRgn, CreateRectRgn, DeleteObject, RGN_DIFF, RGN_ERROR, SetWindowRgn},
     UI::{
         Input::KeyboardAndMouse::{
-            GetAsyncKeyState, GetDoubleClickTime, VK_CONTROL, VK_DOWN, VK_END, VK_HOME, VK_LBUTTON,
-            VK_LEFT, VK_NEXT, VK_PRIOR, VK_RIGHT, VK_SHIFT, VK_UP,
+            GetAsyncKeyState, GetDoubleClickTime, VK_CONTROL, VK_DOWN, VK_END, VK_ESCAPE, VK_HOME,
+            VK_LBUTTON, VK_LEFT, VK_NEXT, VK_PRIOR, VK_RIGHT, VK_SHIFT, VK_UP,
         },
         WindowsAndMessaging::{
-            GWL_EXSTYLE, GetCursorPos, GetWindowLongPtrW, HWND_TOPMOST, SWP_ASYNCWINDOWPOS,
+            CallNextHookEx, DispatchMessageW, GA_ROOT, GWL_EXSTYLE, GetAncestor, GetCursorPos,
+            GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, MSG,
+            MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE, PeekMessageW, QS_ALLINPUT,
             SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_SHOWWINDOW, SetWindowLongPtrW,
-            SetWindowPos, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+            SetWindowPos, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, WH_MOUSE_LL,
+            WM_MOUSEHWHEEL, WM_MOUSEWHEEL, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+            WindowFromPoint,
         },
     },
 };
 
 use crate::{
-    capture_session::CaptureSession,
+    capture_session::{CaptureRequest, CaptureSession},
     config::{
         SELECTION_BUTTON_CAPTURE_TIMEOUT, SELECTION_BUTTON_GAP, SELECTION_BUTTON_GLYPH_SIZE,
         SELECTION_BUTTON_SETTLE_DELAY, SELECTION_BUTTON_SIZE, SELECTION_BUTTON_VISIBLE_DURATION,
@@ -42,6 +47,7 @@ use crate::{
 const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const DRAG_THRESHOLD: i32 = 4;
 const KEY_A: i32 = 0x41;
+static SCROLL_EPOCH: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone)]
 pub struct SelectionButtonManager {
@@ -51,16 +57,16 @@ pub struct SelectionButtonManager {
 struct SelectionButtonState {
     candidate: Mutex<Option<CapturedSelection>>,
     bounds: Mutex<Option<ScreenRect>>,
+    excluded: Mutex<Vec<ScreenRect>>,
     lifecycle: Mutex<()>,
     probe_sessions: CaptureSession,
     generation: AtomicU64,
+    visibility_revision: AtomicU64,
     running: AtomicBool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct ButtonPlacement {
-    x: i32,
-    y: i32,
+    enabled: AtomicBool,
+    monitor_epoch: AtomicU64,
+    wake: Condvar,
+    wake_lock: Mutex<()>,
 }
 
 #[derive(Clone, Copy)]
@@ -75,16 +81,82 @@ impl Default for SelectionButtonManager {
             inner: Arc::new(SelectionButtonState {
                 candidate: Mutex::new(None),
                 bounds: Mutex::new(None),
+                excluded: Mutex::new(Vec::new()),
                 lifecycle: Mutex::new(()),
                 probe_sessions: CaptureSession::default(),
                 generation: AtomicU64::new(0),
+                visibility_revision: AtomicU64::new(0),
                 running: AtomicBool::new(false),
+                enabled: AtomicBool::new(true),
+                monitor_epoch: AtomicU64::new(0),
+                wake: Condvar::new(),
+                wake_lock: Mutex::new(()),
             }),
         }
     }
 }
 
 impl SelectionButtonManager {
+    pub fn initialize_enabled(&self, enabled: bool) {
+        self.inner.enabled.store(enabled, Ordering::Release);
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.inner.enabled.load(Ordering::Acquire)
+    }
+
+    fn is_enabled_for(&self, epoch: u64) -> bool {
+        self.is_enabled() && self.inner.monitor_epoch.load(Ordering::Acquire) == epoch
+    }
+
+    pub fn set_enabled(&self, app: &AppHandle, enabled: bool) -> Result<(), String> {
+        if !self.transition_enabled(enabled) {
+            return Ok(());
+        }
+        if !enabled {
+            self.emit_visibility(app, false);
+            hide_native_button(app)?;
+        }
+        Ok(())
+    }
+
+    fn transition_enabled(&self, enabled: bool) -> bool {
+        let _lifecycle = self
+            .inner
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _wake = self
+            .inner
+            .wake_lock
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if self.is_enabled() == enabled {
+            return false;
+        }
+        self.inner.enabled.store(enabled, Ordering::Release);
+        self.inner.monitor_epoch.fetch_add(1, Ordering::AcqRel);
+        self.inner.probe_sessions.cancel_current();
+        self.inner.generation.fetch_add(1, Ordering::AcqRel);
+        self.inner
+            .candidate
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
+        self.inner
+            .bounds
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
+        self.inner
+            .excluded
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clear();
+        self.inner.wake.notify_all();
+        true
+    }
+
     pub fn configure_native_style(&self, app: &AppHandle) -> Result<(), String> {
         let hwnd = selection_button_hwnd(app)?;
         // SAFETY: hwnd belongs to the pre-created Tauri tool window.
@@ -121,7 +193,16 @@ impl SelectionButtonManager {
     }
 
     pub fn stop(&self, app: &AppHandle) {
+        let _wake = self
+            .inner
+            .wake_lock
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         self.inner.running.store(false, Ordering::Release);
+        self.inner.enabled.store(false, Ordering::Release);
+        self.inner.monitor_epoch.fetch_add(1, Ordering::AcqRel);
+        self.inner.wake.notify_all();
+        drop(_wake);
         self.inner.probe_sessions.cancel_current();
         let _ = self.hide(app);
     }
@@ -137,7 +218,11 @@ impl SelectionButtonManager {
             .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        self.inner.generation.fetch_add(1, Ordering::AcqRel);
+        if !self.is_enabled() {
+            return None;
+        }
+        self.inner.probe_sessions.cancel_current();
+        let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
         let candidate = self
             .inner
             .candidate
@@ -149,7 +234,8 @@ impl SelectionButtonManager {
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .take();
-        let _ = hide_native_button(app);
+        drop(_lifecycle);
+        let _ = self.queue_native_hide(app, generation);
         candidate.filter(|selection| selection.foreground_context.is_valid_and_foreground())
     }
 
@@ -159,11 +245,14 @@ impl SelectionButtonManager {
         context: ForegroundContext,
         mouse_hint: Option<MouseSelectionHint>,
         placement_hint: Option<MouseSelectionHint>,
+        epoch: u64,
     ) {
         if context.process_id == std::process::id() {
             return;
         }
-        let request = self.inner.probe_sessions.begin();
+        let Some(request) = self.begin_probe(epoch) else {
+            return;
+        };
         let manager = self.clone();
         let capture_academic_context =
             app.state::<ModelConfigStore>().get().mode == TranslationMode::Academic;
@@ -174,13 +263,14 @@ impl SelectionButtonManager {
             .spawn(move || {
                 let started = Instant::now();
                 thread::sleep(SELECTION_BUTTON_SETTLE_DELAY);
-                if !manager.inner.probe_sessions.is_current(&request)
+                if !manager.is_enabled_for(epoch)
+                    || !manager.inner.probe_sessions.is_current(&request)
                     || !context.is_valid_and_foreground()
                 {
                     return;
                 }
 
-                match SelectionService::capture_with_timeout(
+                match SelectionService::capture_for_button(
                     context.clone(),
                     request.cancellation.clone(),
                     SELECTION_BUTTON_CAPTURE_TIMEOUT,
@@ -188,9 +278,12 @@ impl SelectionButtonManager {
                     capture_academic_context,
                 ) {
                     Ok(selection)
-                        if manager.inner.probe_sessions.is_current(&request)
+                        if manager.is_enabled_for(epoch)
+                            && manager.inner.probe_sessions.is_current(&request)
                             && context.is_valid_and_foreground() =>
                     {
+                        let lines = selection.line_rects;
+                        let nearby = selection.nearby_rects;
                         let captured = CapturedSelection {
                             text: selection.text,
                             context_before: selection.context_before,
@@ -202,17 +295,13 @@ impl SelectionButtonManager {
                             clipboard_restored: None,
                             warning_code: None,
                         };
-                        if let Err(error) = manager.show_candidate(&app, captured, placement_hint) {
-                            warn!(
-                                application = %worker_application_name,
-                                capture_method = "selection-button",
-                                text_length = 0,
-                                elapsed_ms = started.elapsed().as_millis(),
-                                error_code = "SELECTION_BUTTON_SHOW_FAILED",
-                                %error,
-                                "selection button could not be shown"
-                            );
-                        }
+                        let ui_app = app.clone();
+                        let ui_manager = manager.clone();
+                        let _ = app.run_on_main_thread(move || {
+                            if let Err(error) = ui_manager.show_candidate(&ui_app, captured, placement_hint, &lines, nearby.as_deref(), &request, epoch) {
+                                warn!(application = %worker_application_name, %error, "selection button could not be shown");
+                            }
+                        });
                     }
                     Ok(_) => {}
                     Err(failure) => {
@@ -243,42 +332,82 @@ impl SelectionButtonManager {
         }
     }
 
+    fn begin_probe(&self, epoch: u64) -> Option<CaptureRequest> {
+        // Keep the originating monitor epoch. Recapturing it here would allow
+        // an old mouse release to become a new request after off/on toggles.
+        let _lifecycle = self
+            .inner
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        self.is_enabled_for(epoch)
+            .then(|| self.inner.probe_sessions.begin())
+    }
+
     fn show_candidate(
         &self,
         app: &AppHandle,
         candidate: CapturedSelection,
         placement_hint: Option<MouseSelectionHint>,
+        lines: &[ScreenRect],
+        nearby: Option<&[ScreenRect]>,
+        request: &CaptureRequest,
+        epoch: u64,
     ) -> Result<(), String> {
-        if !candidate.foreground_context.is_valid_and_foreground() {
+        if !self.is_enabled_for(epoch) || !candidate.foreground_context.is_valid_and_foreground() {
             return Ok(());
         }
         let selection_anchor = candidate.selection_rect.unwrap_or_else(cursor_anchor);
         let monitor_anchor = placement_hint
             .map(|hint| point_anchor(hint.focus))
-            .unwrap_or(selection_anchor);
+            .unwrap_or_else(|| lines.last().copied().unwrap_or(selection_anchor));
         let (work_area, dpi) = monitor_metrics(monitor_anchor, candidate.foreground_context.hwnd)?;
         let size = scale_for_dpi(SELECTION_BUTTON_SIZE, dpi);
         let glyph_size = scale_for_dpi(SELECTION_BUTTON_GLYPH_SIZE, dpi);
         let gap = scale_for_dpi(SELECTION_BUTTON_GAP, dpi);
-        let position = match (placement_hint, candidate.selection_rect) {
-            (Some(hint), Some(selection)) => calculate_selection_side_button_position(
-                selection, hint.focus, work_area, size, glyph_size, gap,
-            ),
-            (Some(hint), None) => {
-                calculate_pointer_button_position(hint, work_area, size, glyph_size, gap)
-            }
-            (None, _) => {
-                calculate_button_position(selection_anchor, work_area, size, glyph_size, gap)
-            }
+        let Some(position) = crate::selection_placement::place(
+            lines,
+            nearby,
+            placement_hint,
+            selection_anchor,
+            work_area,
+            size,
+            glyph_size,
+            gap,
+        ) else {
+            return Ok(());
         };
+        let mut excluded = lines.to_vec();
+        excluded.extend_from_slice(nearby.unwrap_or_default());
+        excluded.retain(|rect| crate::selection_placement::intersects(*rect, position));
         let _lifecycle = self
             .inner
             .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if !candidate.foreground_context.is_valid_and_foreground() {
+        if !self.is_enabled_for(epoch)
+            || !candidate.foreground_context.is_valid_and_foreground()
+            || !self.inner.probe_sessions.is_current(request)
+        {
             return Ok(());
         }
+        let hwnd = selection_button_hwnd(app)?;
+        self.configure_native_style(app)?;
+        // Moving a hidden window first lets WM_DPICHANGED settle on the target
+        // monitor. The show below reapplies the physical size before painting.
+        unsafe {
+            SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                position.left,
+                position.top,
+                size,
+                size,
+                SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_HIDEWINDOW,
+            )
+        }
+        .map_err(|error| format!("定位划词按钮失败：{error}"))?;
+        clip_button_hit_region(hwnd, position, &excluded)?;
         let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
         *self
             .inner
@@ -289,25 +418,24 @@ impl SelectionButtonManager {
             .inner
             .bounds
             .lock()
-            .unwrap_or_else(|error| error.into_inner()) = Some(ScreenRect {
-            left: position.x,
-            top: position.y,
-            right: position.x.saturating_add(size),
-            bottom: position.y.saturating_add(size),
-        });
+            .unwrap_or_else(|error| error.into_inner()) = Some(position);
+        *self
+            .inner
+            .excluded
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = excluded.clone();
+        self.emit_visibility(app, true);
 
-        let hwnd = selection_button_hwnd(app)?;
-        self.configure_native_style(app)?;
         // SAFETY: coordinates are physical pixels and hwnd is the live button window.
         let show_result = unsafe {
             SetWindowPos(
                 hwnd,
                 Some(HWND_TOPMOST),
-                position.x,
-                position.y,
+                position.left,
+                position.top,
                 size,
                 size,
-                SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS | SWP_SHOWWINDOW,
+                SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW,
             )
         }
         .map_err(|error| format!("显示划词按钮失败：{error}"));
@@ -328,21 +456,86 @@ impl SelectionButtonManager {
         let manager = self.clone();
         let app = app.clone();
         thread::spawn(move || {
-            thread::sleep(SELECTION_BUTTON_VISIBLE_DURATION);
-            if manager.inner.generation.load(Ordering::Acquire) == generation {
-                let _ = manager.hide(&app);
+            use crate::selection_retention::{Action, Proximity, Retention};
+            let started = Instant::now();
+            let mut retention = Retention::new(SELECTION_BUTTON_VISIBLE_DURATION);
+            let near_gap = scale_for_dpi(12, dpi);
+            while manager.inner.generation.load(Ordering::Acquire) == generation {
+                let proximity = cursor_position()
+                    .map(|p| {
+                        if manager.contains_button(p) {
+                            Proximity::Hover
+                        } else if p.x >= position.left - near_gap
+                            && p.x < position.right + near_gap
+                            && p.y >= position.top - near_gap
+                            && p.y < position.bottom + near_gap
+                        {
+                            Proximity::Near
+                        } else {
+                            Proximity::Away
+                        }
+                    })
+                    .unwrap_or(Proximity::Away);
+                match retention.tick(started.elapsed(), proximity) {
+                    Action::Fade => manager.queue_visibility(&app, generation, false),
+                    Action::Restore => manager.queue_visibility(&app, generation, true),
+                    Action::Hide => {
+                        let _ = manager.hide_generation(&app, Some(generation));
+                        break;
+                    }
+                    Action::Keep => {}
+                }
+                thread::sleep(Duration::from_millis(30));
             }
         });
         Ok(())
     }
 
     fn hide(&self, app: &AppHandle) -> Result<(), String> {
+        self.hide_generation(app, None)
+    }
+
+    fn emit_visibility(&self, app: &AppHandle, visible: bool) {
+        if let Some(window) = app.get_webview_window("selection-button") {
+            let revision = self
+                .inner
+                .visibility_revision
+                .fetch_add(1, Ordering::AcqRel)
+                + 1;
+            let _ = window.emit(
+                "selection-button-visibility",
+                serde_json::json!({"revision": revision, "visible": visible}),
+            );
+        }
+    }
+
+    fn queue_visibility(&self, app: &AppHandle, generation: u64, visible: bool) {
+        let manager = self.clone();
+        let ui_app = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let _guard = manager
+                .inner
+                .lifecycle
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if manager.inner.generation.load(Ordering::Acquire) == generation {
+                manager.emit_visibility(&ui_app, visible);
+            }
+        });
+    }
+
+    fn hide_generation(&self, app: &AppHandle, expected: Option<u64>) -> Result<(), String> {
         let _lifecycle = self
             .inner
             .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        self.inner.generation.fetch_add(1, Ordering::AcqRel);
+        if expected
+            .is_some_and(|generation| self.inner.generation.load(Ordering::Acquire) != generation)
+        {
+            return Ok(());
+        }
+        let generation = self.inner.generation.fetch_add(1, Ordering::AcqRel) + 1;
         self.inner
             .candidate
             .lock()
@@ -353,11 +546,30 @@ impl SelectionButtonManager {
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .take();
-        hide_native_button(app)
+        drop(_lifecycle);
+        self.queue_native_hide(app, generation)
+    }
+
+    fn queue_native_hide(&self, app: &AppHandle, generation: u64) -> Result<(), String> {
+        let manager = self.clone();
+        let ui_app = app.clone();
+        app.run_on_main_thread(move || {
+            let _lifecycle = manager
+                .inner
+                .lifecycle
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            // An old queued hide must not dismiss a newer selection window.
+            if manager.inner.generation.load(Ordering::Acquire) == generation {
+                let _ = hide_native_button(&ui_app);
+            }
+        })
+        .map_err(|error| format!("无法收起划词按钮：{error}"))
     }
 
     fn contains_button(&self, point: POINT) -> bool {
-        self.inner
+        let inside = self
+            .inner
             .bounds
             .lock()
             .unwrap_or_else(|error| error.into_inner())
@@ -366,31 +578,107 @@ impl SelectionButtonManager {
                     && point.x < bounds.right
                     && point.y >= bounds.top
                     && point.y < bounds.bottom
-            })
+            });
+        inside
+            && !self
+                .inner
+                .excluded
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .iter()
+                .any(|r| {
+                    point.x >= r.left && point.x < r.right && point.y >= r.top && point.y < r.bottom
+                })
     }
 }
 
 fn run_input_monitor(app: AppHandle, manager: SelectionButtonManager) {
+    while manager.inner.running.load(Ordering::Acquire) {
+        let mut guard = manager
+            .inner
+            .wake_lock
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        while manager.inner.running.load(Ordering::Acquire) && !manager.is_enabled() {
+            guard = manager
+                .inner
+                .wake
+                .wait(guard)
+                .unwrap_or_else(|error| error.into_inner());
+        }
+        drop(guard);
+        if !manager.inner.running.load(Ordering::Acquire) {
+            break;
+        }
+        let epoch = manager.inner.monitor_epoch.load(Ordering::Acquire);
+        monitor_enabled(&app, &manager, epoch);
+    }
+}
+
+fn monitor_enabled(app: &AppHandle, manager: &SelectionButtonManager, epoch: u64) {
     let mut mouse_was_down = key_is_down(VK_LBUTTON.0 as i32);
     let mut mouse_press: Option<(POINT, bool)> = None;
     let mut last_release: Option<MouseRelease> = None;
-    let mut keyboard_selection_in_progress = false;
+    // A selection already underway when monitoring resumes is incomplete.
+    let shift_down_at_start = key_is_down(VK_SHIFT.0 as i32);
+    let ctrl_a_at_start = key_is_down(VK_CONTROL.0 as i32) && key_is_down(KEY_A);
+    let mut keyboard_selection_in_progress = shift_down_at_start || ctrl_a_at_start;
+    let mut skip_keyboard_release = keyboard_selection_in_progress;
+    // The hook only counts wheel activity and always passes input through.
+    // This thread pumps messages so Windows can deliver low-level callbacks.
+    let wheel_hook = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(wheel_activity), None, 0) }.ok();
+    if wheel_hook.is_none() {
+        warn!("selection wheel-dismiss hook unavailable");
+    }
+    let mut scroll_epoch = SCROLL_EPOCH.load(Ordering::Acquire);
+    let mut foreground = unsafe { GetForegroundWindow() };
+    let mut dismiss_key_was_down = false;
 
-    while manager.inner.running.load(Ordering::Acquire) {
+    while manager.inner.running.load(Ordering::Acquire) && manager.is_enabled_for(epoch) {
+        let mut message = MSG::default();
+        while unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.as_bool() {
+            unsafe {
+                let _ = TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
+        let next_scroll = SCROLL_EPOCH.load(Ordering::Acquire);
+        let next_foreground = unsafe { GetForegroundWindow() };
+        let dismiss_key = [
+            VK_ESCAPE, VK_NEXT, VK_PRIOR, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_HOME, VK_END,
+        ]
+        .into_iter()
+        .any(|key| key_is_down(key.0 as i32))
+            && !key_is_down(VK_SHIFT.0 as i32);
+        if next_scroll != scroll_epoch
+            || next_foreground != foreground
+            || (dismiss_key && !dismiss_key_was_down)
+        {
+            manager.dismiss(app);
+            last_release = None;
+        }
+        scroll_epoch = next_scroll;
+        foreground = next_foreground;
+        dismiss_key_was_down = dismiss_key;
         let mouse_is_down = key_is_down(VK_LBUTTON.0 as i32);
         if mouse_is_down && !mouse_was_down {
             let point = cursor_position();
-            let over_translay = point.is_some_and(|point| manager.contains_button(point));
+            let over_translay = point.is_some_and(|point| {
+                manager.contains_button(point) || point_is_translay_window(point)
+            });
             mouse_press = point.map(|point| (point, over_translay));
             if !over_translay {
-                manager.dismiss(&app);
+                manager.dismiss(app);
             }
         } else if !mouse_is_down
             && mouse_was_down
             && let (Some((pressed, over_translay)), Some(released)) =
                 (mouse_press.take(), cursor_position())
         {
-            if !over_translay {
+            if over_translay || point_is_translay_window(released) {
+                // Do not let an internal click seed an external double-click.
+                last_release = None;
+            } else {
                 let now = Instant::now();
                 let double_click_window =
                     Duration::from_millis(unsafe { GetDoubleClickTime() } as u64);
@@ -414,7 +702,15 @@ fn run_input_monitor(app: AppHandle, manager: SelectionButtonManager) {
                         anchor: pressed,
                         focus: released,
                     });
-                    manager.probe_after_selection(app.clone(), context, mouse_hint, placement_hint);
+                    if manager.is_enabled_for(epoch) {
+                        manager.probe_after_selection(
+                            app.clone(),
+                            context,
+                            mouse_hint,
+                            placement_hint,
+                            epoch,
+                        );
+                    }
                 }
             }
         }
@@ -430,15 +726,91 @@ fn run_input_monitor(app: AppHandle, manager: SelectionButtonManager) {
         let keyboard_selection_down = (shift_down && selection_navigation_down) || ctrl_a_down;
         if keyboard_selection_down && !keyboard_selection_in_progress {
             keyboard_selection_in_progress = true;
-            manager.dismiss(&app);
+            manager.dismiss(app);
         } else if keyboard_selection_in_progress && !shift_down && !ctrl_a_down {
             keyboard_selection_in_progress = false;
-            if let Ok(context) = ForegroundContext::capture() {
-                manager.probe_after_selection(app.clone(), context, None, None);
+            if !skip_keyboard_release
+                && manager.is_enabled_for(epoch)
+                && let Ok(context) = ForegroundContext::capture()
+            {
+                manager.probe_after_selection(app.clone(), context, None, None, epoch);
             }
+            skip_keyboard_release = false;
         }
 
-        thread::sleep(INPUT_POLL_INTERVAL);
+        // Wake immediately for hook messages instead of delaying mouse input
+        // behind the keyboard-poll interval.
+        unsafe {
+            MsgWaitForMultipleObjectsEx(
+                None,
+                INPUT_POLL_INTERVAL.as_millis() as u32,
+                QS_ALLINPUT,
+                MWMO_INPUTAVAILABLE,
+            );
+        }
+    }
+    if let Some(hook) = wheel_hook {
+        let _ = unsafe { UnhookWindowsHookEx(hook) };
+    }
+}
+
+unsafe extern "system" fn wheel_activity(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code >= 0 && matches!(wparam.0 as u32, WM_MOUSEWHEEL | WM_MOUSEHWHEEL) {
+        SCROLL_EPOCH.fetch_add(1, Ordering::AcqRel);
+    }
+    unsafe { CallNextHookEx(None, code, wparam, lparam) }
+}
+
+fn clip_button_hit_region(
+    hwnd: HWND,
+    bounds: ScreenRect,
+    excluded: &[ScreenRect],
+) -> Result<(), String> {
+    // Windows owns the region only after a successful SetWindowRgn. Each
+    // temporary subtraction region is deleted on every path.
+    unsafe {
+        let region = CreateRectRgn(0, 0, bounds.width(), bounds.height());
+        if region.0.is_null() {
+            return Err("无法准备划词按钮点击区域".to_owned());
+        }
+        for rect in excluded {
+            let cut = CreateRectRgn(
+                rect.left - bounds.left,
+                rect.top - bounds.top,
+                rect.right - bounds.left,
+                rect.bottom - bounds.top,
+            );
+            if cut.0.is_null() {
+                let _ = DeleteObject(region.into());
+                return Err("无法裁剪划词按钮点击区域".to_owned());
+            }
+            let result = CombineRgn(Some(region), Some(region), Some(cut), RGN_DIFF);
+            let _ = DeleteObject(cut.into());
+            if result == RGN_ERROR {
+                let _ = DeleteObject(region.into());
+                return Err("无法裁剪划词按钮点击区域".to_owned());
+            }
+        }
+        if SetWindowRgn(hwnd, Some(region), false) == 0 {
+            let _ = DeleteObject(region.into());
+            return Err("无法应用划词按钮点击区域".to_owned());
+        }
+    }
+    Ok(())
+}
+
+// Non-activating overlays leave the source app foreground. Inspect the actual
+// hit window and its root, including WebView child windows in another process.
+fn point_is_translay_window(point: POINT) -> bool {
+    window_is_translay(unsafe { WindowFromPoint(point) })
+}
+
+fn window_is_translay(hit: HWND) -> bool {
+    unsafe {
+        let root = GetAncestor(hit, GA_ROOT);
+        let mut process_id = 0;
+        GetWindowThreadProcessId(root, Some(&mut process_id));
+        process_id == std::process::id()
     }
 }
 
@@ -467,172 +839,6 @@ fn point_anchor(point: POINT) -> ScreenRect {
     }
 }
 
-fn calculate_pointer_button_position(
-    hint: MouseSelectionHint,
-    work_area: ScreenRect,
-    size: i32,
-    glyph_size: i32,
-    gap: i32,
-) -> ButtonPlacement {
-    let max_x = (work_area.right - size).max(work_area.left);
-    let max_y = (work_area.bottom - size).max(work_area.top);
-    let glyph_size = glyph_size.clamp(0, size);
-    let inset = size.saturating_sub(glyph_size) / 2;
-    let focus = hint.focus;
-    let centered_x = focus.x.saturating_sub(size / 2);
-    let centered_y = focus.y.saturating_sub(size / 2);
-    let right_x = focus.x.saturating_add(gap).saturating_sub(inset);
-    let left_x = focus
-        .x
-        .saturating_sub(gap)
-        .saturating_sub(glyph_size)
-        .saturating_sub(inset);
-    let below_y = focus.y.saturating_add(gap).saturating_sub(inset);
-    let above_y = focus
-        .y
-        .saturating_sub(gap)
-        .saturating_sub(glyph_size)
-        .saturating_sub(inset);
-    let forward = focus.y > hint.anchor.y || (focus.y == hint.anchor.y && focus.x >= hint.anchor.x);
-    let side_candidates = if forward {
-        [(right_x, centered_y), (left_x, centered_y)]
-    } else {
-        [(left_x, centered_y), (right_x, centered_y)]
-    };
-    let candidates = [
-        side_candidates[0],
-        (centered_x, below_y),
-        (centered_x, above_y),
-        side_candidates[1],
-    ];
-
-    for (x, y) in candidates {
-        if x >= work_area.left
-            && y >= work_area.top
-            && x.saturating_add(size) <= work_area.right
-            && y.saturating_add(size) <= work_area.bottom
-        {
-            return ButtonPlacement { x, y };
-        }
-    }
-
-    ButtonPlacement {
-        x: side_candidates[0].0.clamp(work_area.left, max_x),
-        y: centered_y.clamp(work_area.top, max_y),
-    }
-}
-
-fn calculate_selection_side_button_position(
-    selection: ScreenRect,
-    focus: POINT,
-    work_area: ScreenRect,
-    size: i32,
-    glyph_size: i32,
-    gap: i32,
-) -> ButtonPlacement {
-    // Some providers return a selection rectangle that stops before the mouse
-    // focus. Expand it to the observed endpoint so the button cannot be placed
-    // back over the selected text in those applications.
-    let selection = ScreenRect {
-        left: selection.left.min(focus.x),
-        top: selection.top.min(focus.y),
-        right: selection.right.max(focus.x.saturating_add(1)),
-        bottom: selection.bottom.max(focus.y.saturating_add(1)),
-    };
-    let distance_to_left = (i64::from(focus.x) - i64::from(selection.left)).abs();
-    let distance_to_right = (i64::from(focus.x) - i64::from(selection.right)).abs();
-    calculate_button_position_with_side(
-        selection,
-        distance_to_right <= distance_to_left,
-        work_area,
-        size,
-        glyph_size,
-        gap,
-    )
-}
-
-fn calculate_button_position(
-    selection: ScreenRect,
-    work_area: ScreenRect,
-    size: i32,
-    glyph_size: i32,
-    gap: i32,
-) -> ButtonPlacement {
-    calculate_button_position_with_side(selection, true, work_area, size, glyph_size, gap)
-}
-
-fn calculate_button_position_with_side(
-    selection: ScreenRect,
-    prefer_right: bool,
-    work_area: ScreenRect,
-    size: i32,
-    glyph_size: i32,
-    gap: i32,
-) -> ButtonPlacement {
-    let max_x = (work_area.right - size).max(work_area.left);
-    let max_y = (work_area.bottom - size).max(work_area.top);
-    let glyph_size = glyph_size.clamp(0, size);
-    let inset = size.saturating_sub(glyph_size) / 2;
-    let centered_y = selection.top.saturating_add(
-        selection
-            .bottom
-            .saturating_sub(selection.top)
-            .saturating_sub(size)
-            / 2,
-    );
-    let align_right_x = selection
-        .right
-        .saturating_sub(inset.saturating_add(glyph_size));
-    // Position both sides from the visible glyph edge, not the transparent
-    // click target, so left and right have the same optical separation.
-    let right = (
-        selection.right.saturating_add(gap).saturating_sub(inset),
-        centered_y,
-    );
-    let left = (
-        selection
-            .left
-            .saturating_sub(gap)
-            .saturating_sub(inset.saturating_add(glyph_size)),
-        centered_y,
-    );
-    let side_candidates = if prefer_right {
-        [right, left]
-    } else {
-        [left, right]
-    };
-    let candidates = [
-        side_candidates[0],
-        side_candidates[1],
-        (
-            align_right_x,
-            selection.bottom.saturating_add(gap).saturating_sub(inset),
-        ),
-        (
-            align_right_x,
-            selection
-                .top
-                .saturating_sub(gap)
-                .saturating_sub(inset.saturating_add(glyph_size)),
-        ),
-    ];
-
-    for (x, y) in candidates {
-        if x >= work_area.left
-            && y >= work_area.top
-            && x.saturating_add(size) <= work_area.right
-            && y.saturating_add(size) <= work_area.bottom
-        {
-            return ButtonPlacement { x, y };
-        }
-    }
-
-    ButtonPlacement {
-        x: side_candidates[0].0.clamp(work_area.left, max_x),
-        y: centered_y.clamp(work_area.top, max_y),
-    }
-}
-
 fn selection_button_hwnd(app: &AppHandle) -> Result<HWND, String> {
     app.get_webview_window("selection-button")
         .ok_or_else(|| "找不到预创建的划词按钮窗口".to_owned())?
@@ -651,7 +857,7 @@ fn hide_native_button(app: &AppHandle) -> Result<(), String> {
             0,
             0,
             0,
-            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS | SWP_HIDEWINDOW,
+            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_HIDEWINDOW,
         )
         .map_err(|error| format!("隐藏划词按钮失败：{error}"))
     }
@@ -661,155 +867,194 @@ fn hide_native_button(app: &AppHandle) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    const WORK_AREA: ScreenRect = ScreenRect {
-        left: 0,
-        top: 0,
-        right: 1920,
-        bottom: 1080,
-    };
+    #[test]
+    fn old_monitor_cannot_submit_or_cancel_new_probe_after_reenable() {
+        let manager = SelectionButtonManager::default();
+        let old_epoch = manager.inner.monitor_epoch.load(Ordering::Acquire);
+        let old_request = manager.begin_probe(old_epoch).unwrap();
+        manager.transition_enabled(false);
+        assert!(old_request.cancellation.is_cancelled());
+        assert!(manager.begin_probe(old_epoch).is_none());
+        manager.transition_enabled(true);
+        let current_epoch = manager.inner.monitor_epoch.load(Ordering::Acquire);
+        let current_request = manager.begin_probe(current_epoch).unwrap();
+        assert!(manager.begin_probe(old_epoch).is_none());
+        assert!(manager.inner.probe_sessions.is_current(&current_request));
+    }
 
     #[test]
-    fn button_prefers_the_centered_right_side_of_the_selection() {
-        let selection = ScreenRect {
-            left: 200,
-            top: 100,
-            right: 520,
-            bottom: 140,
-        };
+    fn disabling_clears_candidate_geometry_and_pending_capture() {
+        let manager = SelectionButtonManager::default();
+        *manager.inner.candidate.lock().unwrap() = Some(CapturedSelection {
+            text: "previous selection".into(),
+            context_before: None,
+            context_after: None,
+            source: "test".into(),
+            selection_rect: None,
+            foreground_context: ForegroundContext {
+                hwnd: HWND::default(),
+                process_id: 0,
+                application_name: "test".into(),
+            },
+            elapsed_ms: 0,
+            clipboard_restored: None,
+            warning_code: None,
+        });
+        *manager.inner.bounds.lock().unwrap() = Some(ScreenRect {
+            left: 10,
+            top: 10,
+            right: 50,
+            bottom: 50,
+        });
+        manager
+            .inner
+            .excluded
+            .lock()
+            .unwrap()
+            .push(ScreenRect::default());
+        manager.transition_enabled(false);
+        assert!(manager.inner.candidate.lock().unwrap().is_none());
+        assert!(manager.inner.bounds.lock().unwrap().is_none());
+        assert!(manager.inner.excluded.lock().unwrap().is_empty());
+        manager.transition_enabled(true);
+        assert!(manager.inner.candidate.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn rapid_toggle_invalidates_old_probes_and_keeps_only_the_last_epoch() {
+        let manager = SelectionButtonManager::default();
+        let old_epoch = manager.inner.monitor_epoch.load(Ordering::Acquire);
+        let old_probe = manager.inner.probe_sessions.begin();
+        assert!(manager.transition_enabled(false));
+        assert!(!manager.is_enabled());
+        assert!(!manager.inner.probe_sessions.is_current(&old_probe));
+        assert!(!manager.is_enabled_for(old_epoch));
+        assert!(manager.transition_enabled(true));
+        let current_epoch = manager.inner.monitor_epoch.load(Ordering::Acquire);
+        assert!(manager.is_enabled_for(current_epoch));
+        assert!(!manager.is_enabled_for(old_epoch));
+        assert!(!manager.transition_enabled(true));
         assert_eq!(
-            calculate_button_position(selection, WORK_AREA, 40, 20, 3),
-            ButtonPlacement { x: 513, y: 100 }
+            manager.inner.monitor_epoch.load(Ordering::Acquire),
+            current_epoch
         );
+        assert!(manager.transition_enabled(false));
+        assert!(!manager.is_enabled_for(current_epoch));
     }
 
     #[test]
-    fn button_flips_inside_the_monitor_at_the_right_edge() {
-        let selection = ScreenRect {
-            left: 1720,
-            top: 900,
-            right: 1915,
-            bottom: 940,
-        };
-        let placement = calculate_button_position(selection, WORK_AREA, 40, 20, 3);
-        assert!(placement.x >= WORK_AREA.left);
-        assert!(placement.x + 40 <= WORK_AREA.right);
-        assert!(placement.y >= WORK_AREA.top);
-        assert!(placement.y + 40 <= WORK_AREA.bottom);
-        assert_eq!(placement.x + 10 + 20, selection.left - 3);
+    fn wheel_listener_can_be_installed_and_removed_without_input_injection() {
+        unsafe {
+            let hook = SetWindowsHookExW(WH_MOUSE_LL, Some(wheel_activity), None, 0).unwrap();
+            UnhookWindowsHookEx(hook).unwrap();
+        }
     }
 
     #[test]
-    fn visible_glyph_stays_close_without_covering_the_selection() {
-        let selection = ScreenRect {
-            left: 100,
-            top: 200,
-            right: 360,
-            bottom: 224,
+    fn native_region_and_monitor_hit_test_leave_source_text_clickable() {
+        use windows::{
+            Win32::{
+                Graphics::Gdi::{GetWindowRgn, PtInRegion},
+                UI::WindowsAndMessaging::{CreateWindowExW, DestroyWindow, WS_POPUP},
+            },
+            core::w,
         };
-
-        let placement = calculate_button_position(selection, WORK_AREA, 40, 20, 3);
-        let glyph_left = placement.x + 10;
-        let glyph_center_y = placement.y + 20;
-
-        assert_eq!(glyph_left, selection.right + 3);
-        assert_eq!(glyph_center_y, selection.top + 12);
+        unsafe {
+            let hwnd = CreateWindowExW(
+                Default::default(),
+                w!("STATIC"),
+                w!("selection-region-test"),
+                WS_POPUP,
+                100,
+                100,
+                40,
+                40,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let bounds = ScreenRect {
+                left: 100,
+                top: 100,
+                right: 140,
+                bottom: 140,
+            };
+            let text = ScreenRect {
+                left: 80,
+                top: 110,
+                right: 105,
+                bottom: 130,
+            };
+            clip_button_hit_region(hwnd, bounds, &[text]).unwrap();
+            let region = CreateRectRgn(0, 0, 0, 0);
+            assert_ne!(GetWindowRgn(hwnd, region), RGN_ERROR);
+            assert!(!PtInRegion(region, 3, 20).as_bool());
+            assert!(PtInRegion(region, 20, 20).as_bool());
+            // A subsequent selection must not inherit the previous cutout.
+            clip_button_hit_region(hwnd, bounds, &[]).unwrap();
+            GetWindowRgn(hwnd, region);
+            assert!(PtInRegion(region, 3, 20).as_bool());
+            let _ = DeleteObject(region.into());
+            DestroyWindow(hwnd).unwrap();
+            let manager = SelectionButtonManager::default();
+            *manager.inner.bounds.lock().unwrap() = Some(bounds);
+            *manager.inner.excluded.lock().unwrap() = vec![text];
+            assert!(!manager.contains_button(POINT { x: 103, y: 120 }));
+            assert!(manager.contains_button(POINT { x: 120, y: 120 }));
+        }
     }
 
     #[test]
-    fn pointer_placement_follows_the_mouse_release_instead_of_a_large_provider_rect() {
-        let hint = MouseSelectionHint {
-            anchor: POINT { x: 120, y: 120 },
-            focus: POINT { x: 480, y: 700 },
+    fn own_root_and_webview_style_child_are_excluded_without_activation() {
+        use windows::{
+            Win32::UI::WindowsAndMessaging::{
+                CreateWindowExW, DestroyWindow, GetDesktopWindow, WS_CHILD, WS_POPUP,
+            },
+            core::w,
         };
-
-        let placement = calculate_pointer_button_position(hint, WORK_AREA, 40, 20, 3);
-        let glyph_left = placement.x + 10;
-        let glyph_center_y = placement.y + 20;
-
-        assert_eq!(glyph_left, hint.focus.x + 3);
-        assert_eq!(glyph_center_y, hint.focus.y);
-    }
-
-    #[test]
-    fn pointer_placement_uses_the_leading_side_for_a_backward_selection() {
-        let hint = MouseSelectionHint {
-            anchor: POINT { x: 500, y: 400 },
-            focus: POINT { x: 300, y: 400 },
-        };
-
-        let placement = calculate_pointer_button_position(hint, WORK_AREA, 40, 20, 3);
-        let glyph_right = placement.x + 10 + 20;
-
-        assert_eq!(glyph_right, hint.focus.x - 3);
-    }
-
-    #[test]
-    fn pointer_placement_flips_inside_the_monitor_at_an_edge() {
-        let hint = MouseSelectionHint {
-            anchor: POINT { x: 1800, y: 500 },
-            focus: POINT { x: 1915, y: 500 },
-        };
-
-        let placement = calculate_pointer_button_position(hint, WORK_AREA, 40, 20, 3);
-
-        assert!(placement.x >= WORK_AREA.left);
-        assert!(placement.x + 40 <= WORK_AREA.right);
-        assert!(placement.y >= WORK_AREA.top);
-        assert!(placement.y + 40 <= WORK_AREA.bottom);
-    }
-
-    #[test]
-    fn mouse_near_the_left_edge_places_the_glyph_outside_the_left_side() {
-        let selected_word = ScreenRect {
-            left: 998,
-            top: 883,
-            right: 1117,
-            bottom: 939,
-        };
-        let focus = POINT { x: 1054, y: 890 };
-        let placement =
-            calculate_selection_side_button_position(selected_word, focus, WORK_AREA, 40, 20, 3);
-        let glyph_right = placement.x + 10 + 20;
-        let glyph_center_y = placement.y + 20;
-
-        assert_eq!(glyph_right, selected_word.left - 3);
-        assert_eq!(
-            glyph_center_y,
-            selected_word.top + selected_word.height() / 2
-        );
-    }
-
-    #[test]
-    fn mouse_near_the_right_edge_places_the_glyph_outside_the_right_side() {
-        let selection = ScreenRect {
-            left: 300,
-            top: 400,
-            right: 700,
-            bottom: 440,
-        };
-        let focus = POINT { x: 680, y: 420 };
-        let placement =
-            calculate_selection_side_button_position(selection, focus, WORK_AREA, 40, 20, 3);
-        let glyph_left = placement.x + 10;
-
-        assert_eq!(glyph_left, selection.right + 3);
-    }
-
-    #[test]
-    fn right_side_uses_the_mouse_endpoint_when_provider_bounds_are_too_short() {
-        let selection = ScreenRect {
-            left: 300,
-            top: 400,
-            right: 650,
-            bottom: 440,
-        };
-        let focus = POINT { x: 680, y: 420 };
-
-        let placement =
-            calculate_selection_side_button_position(selection, focus, WORK_AREA, 40, 20, 3);
-        let glyph_left = placement.x + 10;
-
-        assert_eq!(glyph_left, focus.x + 1 + 3);
+        // Hidden native windows exercise root ownership without changing focus.
+        unsafe {
+            let root = CreateWindowExW(
+                Default::default(),
+                w!("STATIC"),
+                w!("selection-test"),
+                WS_POPUP,
+                0,
+                0,
+                1,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let child = CreateWindowExW(
+                Default::default(),
+                w!("STATIC"),
+                w!("child"),
+                WS_CHILD,
+                0,
+                0,
+                1,
+                1,
+                Some(root),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let root_is_ours = window_is_translay(root);
+            let child_is_ours = window_is_translay(child);
+            let desktop_is_ours = window_is_translay(GetDesktopWindow());
+            DestroyWindow(root).unwrap();
+            assert!(root_is_ours);
+            assert!(child_is_ours);
+            assert!(!desktop_is_ours);
+            assert!(!window_is_translay(HWND::default()));
+        }
     }
 
     #[test]

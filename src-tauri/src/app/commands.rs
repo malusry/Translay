@@ -7,6 +7,7 @@ use crate::{
     capture_session::CaptureSession,
     clipboard_service::{CLIPBOARD_METHOD, ClipboardService},
     credential_store::CredentialStore,
+    explanation::{ExplanationContent, until_cancelled},
     latest_capture_store::LatestCaptureStore,
     model_config::{
         ApiKeyStatus, ModelBackend, ModelConfig, ModelConfigStore, ModelConfigView,
@@ -140,16 +141,18 @@ pub(super) fn fit_overlay_height(
     overlay: tauri::State<'_, OverlayManager>,
     request_id: u64,
     logical_height: i32,
+    preserve_position: bool,
 ) -> bool {
-    overlay.fit_height(&app, request_id, logical_height)
+    overlay.fit_height(&app, request_id, logical_height, preserve_position)
 }
 
 #[tauri::command]
 pub(super) fn retry_capture(
     app: tauri::AppHandle,
+    request_id: u64,
     coordinator: tauri::State<'_, CaptureCoordinator>,
-) {
-    coordinator.trigger(app);
+) -> Result<bool, String> {
+    coordinator.retry(app, request_id)
 }
 
 #[tauri::command]
@@ -185,6 +188,40 @@ fn validate_detected_selection_with_clipboard(
 #[tauri::command]
 pub(super) fn copy_translation(text: String) -> Result<(), String> {
     ClipboardService::write_text(&text)
+}
+
+#[tauri::command]
+pub(super) async fn explain_translation(
+    request_id: u64,
+    attempt_id: u64,
+    store: tauri::State<'_, LatestCaptureStore>,
+    service: tauri::State<'_, TranslationService>,
+) -> Result<Option<ExplanationContent>, String> {
+    let store = store.inner().clone();
+    if let Some(cached) = store.cached_explanation(request_id) {
+        return Ok(Some(cached));
+    }
+    let Some((request, cancelled)) = store.begin_explanation(request_id, attempt_id) else {
+        return Ok(None);
+    };
+    let service = service.inner().clone();
+    let Some(result) = until_cancelled(cancelled, service.explain(&request)).await else {
+        return Ok(None);
+    };
+    // Dropping the losing HTTP future stops client-side waiting and reading.
+    if !store.finish_explanation(request_id, attempt_id, result.as_ref().ok().cloned()) {
+        return Ok(None);
+    }
+    result.map(Some)
+}
+
+#[tauri::command]
+pub(super) fn cancel_explanation(
+    request_id: u64,
+    attempt_id: u64,
+    store: tauri::State<'_, LatestCaptureStore>,
+) -> bool {
+    store.cancel_explanation(request_id, attempt_id)
 }
 
 #[tauri::command]
@@ -318,6 +355,7 @@ pub(super) async fn test_model_connection(
     let config = ModelConfig {
         backend: input.backend,
         mode: input.mode,
+        selection_icon_enabled: true,
         reasoning_enabled: input.reasoning_enabled,
         local: input.local,
         api: input.api,

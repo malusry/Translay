@@ -1,9 +1,13 @@
+#[cfg(debug_assertions)]
+mod acceptance;
 mod commands;
 mod local_model_detection;
 mod model_backend;
 mod shutdown;
+mod startup;
 mod tray;
 mod tray_feedback;
+mod tray_menu;
 mod windows;
 
 use std::{io, sync::Arc};
@@ -28,10 +32,44 @@ use tray::setup_tray;
 use tray_feedback::TrayFeedbackManager;
 use windows::{
     create_overlay_window, create_selection_button_window, create_tray_feedback_window,
-    show_settings_window,
+    request_settings_window,
 };
 
 pub fn run() {
+    #[cfg(debug_assertions)]
+    if std::env::args().any(|arg| arg == "--document-probe" || arg == "--document-probe-once") {
+        crate::document_probe::run();
+        return;
+    }
+    #[cfg(debug_assertions)]
+    if std::env::args().any(|arg| arg.starts_with("--acceptance=")) {
+        acceptance::run();
+        return;
+    }
+    #[cfg(debug_assertions)]
+    if std::env::args().any(|arg| {
+        matches!(
+            arg.as_str(),
+            "--tray-menu-smoke" | "--tray-menu-manual" | "--tray-menu-manual-check"
+        )
+    }) {
+        tray_menu::run_native_smoke();
+        return;
+    }
+    #[cfg(debug_assertions)]
+    if let Some(process_id) =
+        std::env::args().find_map(|arg| arg.strip_prefix("--tray-menu-cleanup=").map(str::to_owned))
+    {
+        let result = process_id
+            .parse::<u32>()
+            .map_err(|e| e.to_string())
+            .and_then(tray_menu::cleanup_native_credential);
+        if let Err(error) = result {
+            eprintln!("测试凭据清理失败：{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let _ = tracing_subscriber::fmt()
         .with_target(false)
         .without_time()
@@ -40,6 +78,9 @@ pub fn run() {
     let _instance_guard = match SingleInstanceGuard::acquire() {
         Ok(Some(guard)) => guard,
         Ok(None) => {
+            if !std::env::args_os().any(|a| a == "--autostart" || a == "--background") {
+                crate::single_instance::signal_existing();
+            }
             info!(
                 application = "Translay",
                 capture_method = "startup",
@@ -85,13 +126,24 @@ pub fn run() {
     let shutdown = ShutdownCoordinator::new(hotkeys.clone(), coordinator.clone());
 
     let builder = tauri::Builder::default()
+        .manage(startup::Startup::new(
+            !std::env::args_os().any(|a| a == "--autostart" || a == "--background"),
+        ))
         .manage(latest_capture)
         .manage(overlay)
         .manage(coordinator)
         .manage(selection_button.clone())
         .manage(shutdown)
         .manage(TrayFeedbackManager::default())
+        .manage(tray_menu::TrayMenu::default())
+        .manage(windows::SettingsWindow::default())
         .invoke_handler(tauri::generate_handler![
+            tray_menu::get_tray_menu,
+            tray_menu::tray_menu_painted,
+            tray_menu::dismiss_tray_menu,
+            tray_menu::tray_menu_action,
+            startup::startup_status,
+            startup::finish_startup,
             commands::overlay_frontend_ready,
             commands::get_latest_capture,
             commands::ack_capture,
@@ -101,6 +153,8 @@ pub fn run() {
             commands::retry_capture,
             commands::translate_detected_selection,
             commands::copy_translation,
+            commands::explain_translation,
+            commands::cancel_explanation,
             commands::detect_active_local_model,
             commands::get_model_config,
             commands::get_model_api_key_status,
@@ -133,6 +187,9 @@ pub fn run() {
 
     let app = builder
         .setup(move |app| {
+            if let Err(error) = startup::create(app.handle()) {
+                warn!(%error, "Startup presentation unavailable");
+            }
             create_overlay_window(app.handle())
                 .map_err(|error| io::Error::other(format!("创建翻译浮层失败：{error}")))?;
             create_selection_button_window(app.handle())
@@ -157,6 +214,7 @@ pub fn run() {
             }
             let translation_service =
                 TranslationService::new(config_store.clone(), credential_store.clone());
+            setup_selection_button.initialize_enabled(config_store.get().selection_icon_enabled);
             app.manage(config_store);
             app.manage(credential_store);
             app.manage(translation_service);
@@ -173,14 +231,26 @@ pub fn run() {
                 .start(app.handle().clone())
                 .map_err(|error| io::Error::other(format!("启动划词检测失败：{error}")))?;
 
+            tray_menu::create(app.handle()).map_err(io::Error::other)?;
             setup_tray(app)
                 .map_err(|error| io::Error::other(format!("创建系统托盘失败：{error}")))?;
             setup_hotkeys
                 .register(app.handle())
                 .map_err(|error| io::Error::other(format!("注册全局快捷键失败：{error}")))?;
+            let configured = model_backend::model_backend_is_available(
+                &app.state::<ModelConfigStore>().get(),
+                app.state::<CredentialStore>().inner(),
+                app.state::<ModelConfigStore>().get().backend,
+            );
+            app.state::<startup::Startup>().settle(configured);
+            startup::schedule_safety_finish(app.handle());
+            let activation_app = app.handle().clone();
+            crate::single_instance::listen_for_activation(move || {
+                let handle = activation_app.clone();
+                let _ = activation_app.run_on_main_thread(move || startup::repeat(&handle));
+            });
             if std::env::args_os().any(|argument| argument == "--settings") {
-                show_settings_window(app.handle())
-                    .map_err(|error| io::Error::other(format!("显示配置失败：{error}")))?;
+                request_settings_window(app.handle());
             }
             info!(
                 application = "Translay",
@@ -195,21 +265,27 @@ pub fn run() {
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| {
             eprintln!("Translay 启动失败：{error}");
+            let text: Vec<u16> = format!("Translay 启动失败：{error}")
+                .encode_utf16()
+                .chain(Some(0))
+                .collect();
+            unsafe {
+                ::windows::Win32::UI::WindowsAndMessaging::MessageBoxW(
+                    None,
+                    ::windows::core::PCWSTR(text.as_ptr()),
+                    ::windows::core::w!("Translay"),
+                    ::windows::Win32::UI::WindowsAndMessaging::MB_OK
+                        | ::windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR,
+                );
+            }
             std::process::exit(1);
         });
 
     app.run(move |handle, event| match event {
-        tauri::RunEvent::WindowEvent {
-            label,
-            event: tauri::WindowEvent::CloseRequested { api, .. },
-            ..
-        } if label == "settings" => {
-            api.prevent_close();
-            if let Some(window) = handle.get_webview_window("settings") {
-                let _ = window.hide();
-            }
-        }
         tauri::RunEvent::Exit => {
+            tray::stop_clicks(handle);
+            handle.state::<windows::SettingsWindow>().stop();
+            handle.state::<tray_menu::TrayMenu>().stop();
             selection_button.stop(handle);
             if hotkeys.unregister(handle).is_err() {
                 error!(

@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 pub const AUTO_SOURCE_LANGUAGE: &str = "auto";
-pub const DEFAULT_TARGET_LANGUAGE: &str = "zh-CN";
+// The provider resolves direction within the same translation request.
+pub const DEFAULT_TARGET_LANGUAGE: &str = "auto";
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -321,7 +322,7 @@ mod tests {
         let serialized = serde_json::to_string(&request).unwrap();
         assert!(serialized.contains(source));
         assert!(serialized.contains("\"sourceLanguage\":\"auto\""));
-        assert!(serialized.contains("\"targetLanguage\":\"zh-CN\""));
+        assert!(serialized.contains("\"targetLanguage\":\"auto\""));
     }
 
     #[test]

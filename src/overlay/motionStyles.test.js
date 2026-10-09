@@ -49,6 +49,22 @@ describe("overlay motion isolation", () => {
     expect(surface).not.toContain("rgba(250, 250, 248");
   });
 
+  test("the explanation panel reveals continuously on composited properties", () => {
+    const panel = declarationBlock(".explanation-panel");
+    const revealing = declarationBlock(".explanation-panel.revealing");
+    const content = declarationBlock(
+      ".explanation-panel.revealing .explanation-content",
+    );
+
+    expect(panel).toContain("will-change: opacity, transform");
+    expect(revealing).toContain("explanation-panel-enter 380ms");
+    expect(revealing).not.toContain("70ms");
+    expect(content).toContain("32ms both");
+    expect(styles).not.toContain("explanation-header-enter");
+    expect(styles).not.toContain("scale(0.997");
+    expect(styles).not.toContain("background-color: rgba(248, 247, 250");
+  });
+
   test("loading uses a restrained dot and dismissal returns to its anchor", () => {
     expect(styles).toContain(".progress-dot");
     expect(styles).toContain("@keyframes progress-pulse");

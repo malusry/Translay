@@ -1,7 +1,7 @@
 {
   "name": "translay",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A lightweight Windows selection translation tool powered by local or OpenAI-compatible models.",
   "license": "MIT",
   "repository": {
@@ -22,12 +22,14 @@
     "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && cargo check --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml",
     "check": "npm run check:frontend && npm run check:rust",
     "app:dev": "tauri dev",
+    "acceptance": "node tools/acceptance.cjs",
     "app:build": "tauri build --bundles nsis",
     "app:build:exe": "tauri build --no-bundle",
     "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
+    "katex": "^0.18.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

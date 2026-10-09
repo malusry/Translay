@@ -20,6 +20,31 @@ body,
   background: transparent;
 }
 
+.overlay-stage {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.overlay-stage > .overlay {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.overlay-stage.explanation-expanded {
+  gap: 8px;
+}
+
+.overlay-stage.explanation-expanded > .overlay {
+  height: var(--translation-overlay-height);
+  flex: 0 0 var(--translation-overlay-height);
+}
+
 .overlay {
   position: relative;
   isolation: isolate;
@@ -225,8 +250,43 @@ body,
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #4f7cf7;
+  background: currentColor;
   animation: progress-pulse 900ms ease-in-out infinite alternate;
+}
+
+.status {
+  transition: color 150ms ease;
+}
+.status[data-status="daily"] { color: #698779; }
+.status[data-status="study"],
+.status[data-status="loading"] { color: #817b99; }
+.status[data-status="failed"] { color: #a56870; }
+.status[data-status="failed"] .progress-dot {
+  animation: none;
+  background: #b67780;
+  box-shadow: 0 0 0 3px #b6778012;
+}
+.status[data-status="loading"] .progress-dot {
+  box-shadow: 0 0 0 3px #817b9912;
+}
+.status .retry-button {
+  position: relative;
+  margin-left: -2px;
+  color: #a56870;
+}
+.status .retry-button:hover { color: #a56870; background: #b6778012; }
+.retry-glyph {
+  position: absolute;
+  inset: 0;
+  font-family: "Segoe UI Symbol", "Segoe UI", sans-serif;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 24px;
+  text-align: center;
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .status { transition: none; }
 }
 
 @keyframes progress-pulse {
@@ -292,6 +352,11 @@ body,
   outline-offset: 1px;
 }
 
+.explain-button.active {
+  color: #625d80;
+  background: #ebe8f1;
+}
+
 .copy-button.confirmed {
   color: #34815a;
 }
@@ -302,6 +367,249 @@ body,
 
 .copy-button .error-mark {
   stroke-width: 1.8;
+}
+
+.explanation-panel {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 10px 12px 12px;
+  overflow: hidden;
+  border: 1px solid #dad6e4;
+  border-radius: 12px;
+  color: #292a31;
+  background: rgba(243, 241, 247, 0.992);
+  box-shadow:
+    inset 0 0 0 1px rgba(218, 214, 228, 0.4),
+    0 6px 18px rgba(69, 64, 91, 0.065);
+  opacity: 1;
+  transform: translateY(0);
+  will-change: opacity, transform;
+}
+
+.explanation-panel.revealing {
+  animation: explanation-panel-enter 380ms
+    cubic-bezier(0.22, 0.55, 0.28, 1) both;
+}
+
+.explanation-panel.closing,
+.overlay-stage.motion-dismissing .explanation-panel {
+  pointer-events: none;
+  animation: explanation-panel-return 180ms cubic-bezier(0.4, 0, 0.8, 0.4)
+    both;
+}
+
+.explanation-header {
+  display: flex;
+  min-height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.explanation-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #625d80;
+  font-size: 10.5px;
+  font-weight: 640;
+  letter-spacing: 0.01em;
+}
+
+.explanation-heading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #716b94;
+  box-shadow: 0 0 0 3px rgba(113, 107, 148, 0.09);
+}
+
+.explanation-tools {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.explanation-panel .overlay-icon-button:hover:not(:disabled) {
+  color: #514c70;
+  background: #e9e6f0;
+}
+
+.explanation-panel .overlay-icon-button:disabled {
+  color: #aaa6b4;
+  background: transparent;
+  cursor: default;
+}
+
+.explanation-content {
+  min-height: 0;
+  margin-top: 7px;
+  padding-right: 3px;
+  overflow: auto;
+  scrollbar-color: rgba(98, 93, 128, 0.18) transparent;
+  scrollbar-width: thin;
+}
+
+.explanation-feedback {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 0;
+  overflow: hidden;
+  color: #6d6882;
+  font-size: 12.5px;
+}
+
+.explanation-feedback p {
+  max-width: 78%;
+  margin: 0;
+  color: #625f70;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.explanation-loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #716b94;
+  box-shadow: 0 0 0 3px rgba(113, 107, 148, 0.09);
+  animation: explanation-loading-pulse 900ms ease-in-out infinite alternate;
+}
+
+.explanation-retry-button {
+  color: #716b94;
+  background: rgba(113, 107, 148, 0.08);
+}
+
+@keyframes explanation-loading-pulse {
+  from {
+    opacity: 0.38;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.explanation-panel.revealing .explanation-content {
+  animation: explanation-content-enter 300ms var(--ease-quiet) 32ms both;
+}
+
+.explanation-section + .explanation-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(113, 107, 148, 0.11);
+}
+
+.explanation-section h3 {
+  margin: 0 0 6px;
+  color: #625d80;
+  font-size: 10.5px;
+  font-weight: 670;
+  letter-spacing: 0.015em;
+}
+
+.explanation-section p,
+.explanation-section li,
+.explanation-terms dd {
+  color: #34343b;
+  font-size: 13px;
+  font-weight: 420;
+  line-height: 1.58;
+}
+
+.explanation-section p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.explanation-section .explanation-caveat {
+  margin-top: 8px;
+  padding-left: 9px;
+  border-left: 2px solid rgba(113, 107, 148, 0.25);
+  color: #625d80;
+  font-size: 12px;
+}
+
+.explanation-section ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 17px;
+}
+
+.explanation-terms {
+  margin: 0;
+}
+
+.explanation-terms > div {
+  display: grid;
+  grid-template-columns: minmax(88px, 0.42fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.explanation-terms > div + div {
+  margin-top: 9px;
+}
+
+.explanation-terms dt {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  color: #625d80;
+  font-size: 11.5px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.explanation-terms dt small {
+  color: #89849d;
+  font-size: 10.5px;
+  font-weight: 520;
+}
+
+.explanation-terms dd {
+  margin: 0;
+}
+
+@keyframes explanation-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes explanation-content-enter {
+  from {
+    opacity: 0.55;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes explanation-panel-return {
+  to {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
 }
 
 .overlay.motion-revealing .translation {
@@ -420,15 +728,105 @@ body,
   margin-top: 6px;
   overflow: auto;
   color: #1d1d1f;
-  font-size: 14.2px;
+  font-size: 14px;
   font-weight: 430;
-  line-height: 1.58;
+  line-height: 1.72;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   unicode-bidi: plaintext;
   user-select: text;
   scrollbar-color: rgba(110, 110, 115, 0.2) transparent;
   scrollbar-width: thin;
+}
+
+.translation-paragraph {
+  margin: 0;
+}
+
+.translation-paragraph + .translation-paragraph {
+  margin-top: 10px;
+}
+
+.translation-list-item {
+  display: flex;
+  align-items: baseline;
+}
+
+.translation-list-marker {
+  flex: 0 0 auto;
+}
+
+.translation-list-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.overlay.compact .translation {
+  line-height: 1.58;
+}
+
+.tone-note {
+  margin: 8px 0 0;
+  padding: 5px 6px;
+  border-radius: 6px;
+  color: #85877f;
+  background: linear-gradient(100deg, rgba(225, 233, 215, 0.23), rgba(238, 239, 231, 0.12));
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.65;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.math-inline {
+  display: inline-block;
+  max-width: calc(100% - 0.12em);
+  margin: 0 0.06em;
+  padding: 2px 0 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  color: inherit;
+  line-height: 1;
+  vertical-align: -0.08em;
+}
+
+.math-display {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0.48em 0;
+  padding: 2px 2px 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  color: inherit;
+  line-height: 1.25;
+  text-align: center;
+  scrollbar-color: rgba(98, 93, 128, 0.18) transparent;
+  scrollbar-width: thin;
+}
+
+.math-display > .katex-display {
+  min-width: max-content;
+  margin: 0;
+}
+
+.math-inline .katex,
+.math-display .katex {
+  color: inherit;
+  font-size: 1.02em;
+}
+
+.math-fallback {
+  font-family: "Cambria Math", "STIX Two Math", "Segoe UI Symbol", monospace;
+  white-space: pre-wrap;
+}
+
+.overlay.compact .math-display {
+  display: inline;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
 }
 
 @keyframes content-reveal {
@@ -455,6 +853,19 @@ body,
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .explanation-panel.revealing {
+    animation: reduced-content-reveal 100ms ease-out both;
+  }
+
+  .explanation-panel.closing,
+  .overlay-stage.motion-dismissing .explanation-panel {
+    animation: content-dismiss-reduced 100ms ease-out both;
+  }
+
+  .explanation-panel.revealing .explanation-content {
+    animation: none;
+  }
+
   .overlay.capturing .overlay-surface,
   .overlay.translating .overlay-surface {
     animation: reduced-surface-enter 120ms ease-out
@@ -470,6 +881,12 @@ body,
   }
 
   .progress-dot {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .explanation-loading-dot {
     animation: none;
     opacity: 1;
     transform: none;
@@ -508,6 +925,17 @@ body,
   padding-bottom: 9px;
 }
 
+.overlay.translating[data-retry-layout] {
+  width: 100%;
+  height: 100%;
+  justify-content: flex-start;
+  padding-top: 10px;
+  padding-bottom: 11px;
+}
+.overlay.translating[data-retry-layout] .overlay-surface,
+.overlay.translating[data-retry-layout] .status,
+.overlay.translating[data-retry-layout] .tools { animation: none; }
+
 .overlay.compact {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) 50px;
@@ -540,4 +968,13 @@ body,
   grid-row: 1;
   width: 50px;
   min-width: 50px;
+}
+
+.overlay.compact.has-explanation-action {
+  grid-template-columns: auto minmax(0, 1fr) 76px;
+}
+
+.overlay.compact.has-explanation-action .tools {
+  width: 76px;
+  min-width: 76px;
 }

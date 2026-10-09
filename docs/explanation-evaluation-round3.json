@@ -1,0 +1,81 @@
+{
+  "round": 3,
+  "model": "deepseek-v4-flash",
+  "reasoningEnabled": false,
+  "promptSha256": "3eaf1a9eef20c84f624243b33335fa327442ae28344e938572c9683e7ae4b115",
+  "scope": "Targeted regression on cases 8, 11, 12 only; other cases were not rerun with this prompt hash.",
+  "results": [
+    {
+      "id": 8,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "This supports the claim.",
+        "translation": "这支持了该主张。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这句话表示某个事实、证据或结果印证并支持了前文所述的观点或论断。需要注意的是，\\\"support\\\" 在此表示提供支撑或佐证，但并不必然等同于完全证实该主张。\",\"keyConcepts\":[],\"caveat\":\"\\\"claim\\\" 所指的具体主张在所提供的上下文中未明确，无法确定其具体内容。\"}",
+      "output": {
+        "coreExplanation": "这句话表示某个事实、证据或结果印证并支持了前文所述的观点或论断。需要注意的是，\"support\" 在此表示提供支撑或佐证，但并不必然等同于完全证实该主张。",
+        "keyConcepts": [],
+        "caveat": "\"claim\" 所指的具体主张在所提供的上下文中未明确，无法确定其具体内容。"
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 1.48,
+      "review": {
+        "status": "needsPolish",
+        "note": "补出 claim 歧义提示，但未完整覆盖 This；仍出现前文的泛指。"
+      }
+    },
+    {
+      "id": 11,
+      "input": {
+        "inputKind": "mathematicalExpression",
+        "sourceText": "We divide the scores by $\\sqrt{d_k}$ before softmax.",
+        "translation": "我们先将分数除以 $\\sqrt{d_k}$，再进行 softmax。",
+        "contextBefore": "d_k is the key dimension."
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这段话说明缩放点积注意力中的一个操作顺序：在应用softmax之前，先对分数进行缩放，缩放因子是 $\\\\sqrt{d_k}$，其中 $d_k$ 是键向量的维度。\",\"keyConcepts\":[{\"term\":\"softmax\",\"translation\":\"\",\"explanation\":\"一种将一组数值转换为概率分布的函数，使输出非负且总和为1。\"}],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这段话说明缩放点积注意力中的一个操作顺序：在应用softmax之前，先对分数进行缩放，缩放因子是 $\\sqrt{d_k}$，其中 $d_k$ 是键向量的维度。",
+        "keyConcepts": [
+          {
+            "term": "softmax",
+            "translation": "",
+            "explanation": "一种将一组数值转换为概率分布的函数，使输出非负且总和为1。"
+          }
+        ],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 1.03,
+      "review": {
+        "status": "fail",
+        "note": "无依据把原文确定为缩放点积注意力。"
+      }
+    },
+    {
+      "id": 12,
+      "input": {
+        "inputKind": "mathematicalExpression",
+        "sourceText": "√ab",
+        "translation": "$\\sqrt{ab}$"
+      },
+      "inPromptExample": true,
+      "rawOutput": "{\"coreExplanation\":\"这段表达式表示对 a 与 b 的乘积取平方根。\",\"keyConcepts\":[],\"caveat\":\"仅凭提取文本无法确定 b 是否在根号内，译文给出的根号范围需对照原式确认。\"}",
+      "output": {
+        "coreExplanation": "这段表达式表示对 a 与 b 的乘积取平方根。",
+        "keyConcepts": [],
+        "caveat": "仅凭提取文本无法确定 b 是否在根号内，译文给出的根号范围需对照原式确认。"
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.84,
+      "review": {
+        "status": "fail",
+        "note": "正文确定根号覆盖 ab，提示却说范围不确定，互相矛盾。"
+      }
+    }
+  ],
+  "selectedForCurrentPrompt": false,
+  "decision": "Do not adopt this prompt revision: contradictory interpretation in case 12. Restore fully tested round-2 prompt."
+}

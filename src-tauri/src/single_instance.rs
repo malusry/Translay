@@ -1,7 +1,10 @@
 use windows::{
     Win32::{
         Foundation::{CloseHandle, ERROR_ALREADY_EXISTS, GetLastError, HANDLE},
-        System::Threading::CreateMutexW,
+        System::Threading::{
+            CreateEventW, CreateMutexW, EVENT_MODIFY_STATE, OpenEventW, SetEvent,
+            WaitForSingleObject,
+        },
     },
     core::PCWSTR,
 };
@@ -10,11 +13,26 @@ const INSTANCE_MUTEX_NAME: &str = "Local\\Translay.SystemOverlay.Singleton";
 
 pub struct SingleInstanceGuard {
     handle: HANDLE,
+    activation: Option<HANDLE>,
 }
 
 impl SingleInstanceGuard {
     pub fn acquire() -> Result<Option<Self>, String> {
-        Self::acquire_named(INSTANCE_MUTEX_NAME)
+        let mut guard = Self::acquire_named(INSTANCE_MUTEX_NAME)?;
+        if let Some(ref mut owner) = guard {
+            owner.activation = Some(
+                unsafe {
+                    CreateEventW(
+                        None,
+                        false,
+                        false,
+                        windows::core::w!("Local\\Translay.Activate"),
+                    )
+                }
+                .map_err(|e| e.to_string())?,
+            );
+        }
+        Ok(guard)
     }
 
     fn acquire_named(name: &str) -> Result<Option<Self>, String> {
@@ -33,7 +51,10 @@ impl SingleInstanceGuard {
             let _ = unsafe { CloseHandle(handle) };
             return Ok(None);
         }
-        Ok(Some(Self { handle }))
+        Ok(Some(Self {
+            handle,
+            activation: None,
+        }))
     }
 }
 
@@ -41,6 +62,9 @@ impl Drop for SingleInstanceGuard {
     fn drop(&mut self) {
         // SAFETY: this guard uniquely owns the process-local handle.
         let _ = unsafe { CloseHandle(self.handle) };
+        if let Some(handle) = self.activation {
+            let _ = unsafe { CloseHandle(handle) };
+        }
     }
 }
 
@@ -67,4 +91,39 @@ mod tests {
                 .is_some()
         );
     }
+}
+
+pub fn signal_existing() {
+    unsafe {
+        if let Ok(handle) = OpenEventW(
+            EVENT_MODIFY_STATE,
+            false,
+            windows::core::w!("Local\\Translay.Activate"),
+        ) {
+            let _ = SetEvent(handle);
+            let _ = CloseHandle(handle);
+        }
+    }
+}
+
+pub fn listen_for_activation(callback: impl Fn() + Send + 'static) {
+    std::thread::spawn(move || unsafe {
+        let Ok(handle) = CreateEventW(
+            None,
+            false,
+            false,
+            windows::core::w!("Local\\Translay.Activate"),
+        ) else {
+            return;
+        };
+        loop {
+            let result = WaitForSingleObject(handle, 1000);
+            if result == windows::Win32::Foundation::WAIT_OBJECT_0 {
+                callback();
+            } else if result == windows::Win32::Foundation::WAIT_FAILED {
+                break;
+            }
+        }
+        let _ = CloseHandle(handle);
+    });
 }

@@ -1,5 +1,5 @@
 use std::{
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
     thread,
     time::Instant,
 };
@@ -8,9 +8,10 @@ use tauri::{AppHandle, Manager};
 use tracing::{error, info, warn};
 
 use crate::{
-    capture_session::{CaptureRequest, CaptureSession},
+    capture_session::CaptureRequest,
     clipboard_service::{CLIPBOARD_METHOD, ClipboardService},
     config::UIA_TIMEOUT,
+    explanation::ExplanationRequest,
     foreground_context::ForegroundContext,
     model_config::{ModelBackend, ModelConfigStore},
     models::{CapturePayload, CapturePhase, CapturedSelection},
@@ -18,13 +19,15 @@ use crate::{
     selection_service::{SelectionFailure, SelectionService},
     translation::{ContentType, LanguageProfile, TranslationMode, TranslationRequest},
     translation_service::TranslationService,
+    translation_task::{RetryAction, SelectionAction, TranslationTask, TriggerAction},
 };
 
 #[derive(Clone)]
 pub struct CaptureCoordinator {
-    sessions: Arc<CaptureSession>,
     overlay: OverlayManager,
+    // Serializes handoff and display commits. Never held over selection I/O or await.
     coordination: Arc<Mutex<()>>,
+    task: Arc<Mutex<TranslationTask>>,
 }
 
 #[derive(Debug)]
@@ -45,9 +48,9 @@ struct PreparedTranslation {
 impl CaptureCoordinator {
     pub fn new(overlay: OverlayManager) -> Self {
         Self {
-            sessions: Arc::new(CaptureSession::default()),
             overlay,
             coordination: Arc::new(Mutex::new(())),
+            task: Arc::new(Mutex::new(TranslationTask::default())),
         }
     }
 
@@ -55,26 +58,59 @@ impl CaptureCoordinator {
         &self.overlay
     }
 
+    fn task(&self) -> MutexGuard<'_, TranslationTask> {
+        self.task.lock().unwrap_or_else(|error| error.into_inner())
+    }
+
     pub fn cancel_current(&self) {
         let _coordination = self
             .coordination
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        self.sessions.cancel_current();
+        self.task().cancel();
     }
 
     pub fn trigger(&self, app: AppHandle) {
-        // Every press starts a new capture. CaptureSession cancels the previous
-        // generation, while the currently visible overlay remains until it is
-        // replaced or auto-hidden.
-        let request = {
-            let _coordination = self
-                .coordination
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
-            self.sessions.begin()
+        // Read a repeated selection without cancelling a model request or changing
+        // the visible loading state. A different selection enters the normal path.
+        let action = {
+            let _guard = self.coordination.lock().unwrap_or_else(|e| e.into_inner());
+            let latest = app
+                .state::<crate::latest_capture_store::LatestCaptureStore>()
+                .get();
+            let action = self.task().trigger(latest.as_ref());
+            if let TriggerAction::Capture(request) = &action {
+                self.overlay.begin_request(request.id);
+            }
+            action
         };
-        self.overlay.begin_request(request.id);
+        if let TriggerAction::Probe(probe) = action {
+            let Ok(context) = ForegroundContext::capture() else {
+                return;
+            };
+            let academic = app.state::<ModelConfigStore>().get().mode == TranslationMode::Academic;
+            let coordinator = self.clone();
+            thread::spawn(move || {
+                if let Ok(selection) = run_pipeline(
+                    context,
+                    probe.cancellation.clone(),
+                    Instant::now(),
+                    academic,
+                ) {
+                    coordinator.trigger_captured_checked(app, selection, Some(&probe));
+                }
+                // A failed reread must not erase an already running translation.
+            });
+            return;
+        }
+        if let TriggerAction::Capture(request) = action {
+            self.trigger_capture(app, request);
+        }
+    }
+
+    fn trigger_capture(&self, app: AppHandle, request: CaptureRequest) {
+        // The generation is already reserved atomically with the trigger/retry
+        // decision. Capture and window work do not hold the task state lock.
         let context = match ForegroundContext::capture() {
             Ok(context) => context,
             Err(code) => {
@@ -108,16 +144,15 @@ impl CaptureCoordinator {
             warning_code: None,
             language_profile: None,
             translation_mode: None,
+            tone_note: None,
         };
         {
             let _coordination = self
                 .coordination
                 .lock()
                 .unwrap_or_else(|error| error.into_inner());
-            if !can_commit(
-                self.sessions.is_current(&request),
-                context.is_valid_and_foreground(),
-            ) {
+            let foreground_unchanged = context.is_valid_and_foreground();
+            if !can_commit(self.task().is_current(&request), foreground_unchanged) {
                 return;
             }
             match self
@@ -144,7 +179,7 @@ impl CaptureCoordinator {
                     started,
                     capture_academic_context,
                 );
-                if !coordinator.sessions.is_current(&request) {
+                if !coordinator.task().is_current(&request) {
                     return;
                 }
 
@@ -192,6 +227,7 @@ impl CaptureCoordinator {
                                 warning_code: selection.warning_code,
                                 language_profile: Some(language_profile),
                                 translation_mode: Some(model_config.mode),
+                                tone_note: None,
                             },
                             anchor,
                             Some(PreparedTranslation {
@@ -234,13 +270,14 @@ impl CaptureCoordinator {
                                 capture_method: failure.source,
                                 elapsed_ms: elapsed,
                                 selection_rect: None,
-                                error_code: Some(failure.code),
-                                error_message: Some(failure.message),
+                                error_code: Some(failure.code.clone()),
+                                error_message: Some(if failure.code == "NO_TEXT_SELECTED" { "请先选择文字".into() } else { failure.message }),
                                 focus_preserved: true,
                                 clipboard_restored: failure.clipboard_restored,
                                 warning_code: failure.warning_code,
                                 language_profile: None,
                                 translation_mode: None,
+                                tone_note: None,
                             },
                             cursor_anchor(),
                             None,
@@ -253,10 +290,8 @@ impl CaptureCoordinator {
                     .coordination
                     .lock()
                     .unwrap_or_else(|error| error.into_inner());
-                if !can_commit(
-                    coordinator.sessions.is_current(&request),
-                    context.is_valid_and_foreground(),
-                ) {
+                let foreground_unchanged = context.is_valid_and_foreground();
+                if !can_commit(coordinator.task().is_current(&request), foreground_unchanged) {
                     return;
                 }
                 let mut local_display_gate = None;
@@ -336,6 +371,15 @@ impl CaptureCoordinator {
     /// Starts the normal translation/display half of the pipeline with text
     /// that the passive selection monitor has already read through UIA.
     pub fn trigger_captured(&self, app: AppHandle, selection: CapturedSelection) -> bool {
+        self.trigger_captured_checked(app, selection, None)
+    }
+
+    fn trigger_captured_checked(
+        &self,
+        app: AppHandle,
+        selection: CapturedSelection,
+        probe: Option<&CaptureRequest>,
+    ) -> bool {
         let context = selection.foreground_context.clone();
         if !context.is_valid_and_foreground() {
             return false;
@@ -345,9 +389,22 @@ impl CaptureCoordinator {
                 .coordination
                 .lock()
                 .unwrap_or_else(|error| error.into_inner());
-            self.sessions.begin()
+            let latest = app
+                .state::<crate::latest_capture_store::LatestCaptureStore>()
+                .get();
+            let config = app.state::<ModelConfigStore>().get();
+            let action = self
+                .task()
+                .selection(&selection, &config, latest.as_ref(), probe);
+            match action {
+                SelectionAction::Stale => return false,
+                SelectionAction::Reuse => return true,
+                SelectionAction::Start(request) => {
+                    self.overlay.begin_request(request.id);
+                    request
+                }
+            }
         };
-        self.overlay.begin_request(request.id);
 
         let started = Instant::now();
         let language_profile = LanguageProfile::analyze(&selection.text);
@@ -380,6 +437,7 @@ impl CaptureCoordinator {
             warning_code: selection.warning_code,
             language_profile: Some(language_profile),
             translation_mode: Some(model_config.mode),
+            tone_note: None,
         };
         info!(
             application = %context.application_name,
@@ -394,10 +452,8 @@ impl CaptureCoordinator {
             .coordination
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if !can_commit(
-            self.sessions.is_current(&request),
-            context.is_valid_and_foreground(),
-        ) {
+        let foreground_unchanged = context.is_valid_and_foreground();
+        if !can_commit(self.task().is_current(&request), foreground_unchanged) {
             return false;
         }
 
@@ -449,6 +505,53 @@ impl CaptureCoordinator {
         true
     }
 
+    /// Retry the failed source, not whatever happens to be selected now.
+    pub fn retry(&self, app: AppHandle, request_id: u64) -> Result<bool, String> {
+        let guard = self.coordination.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(mut payload) = app
+            .state::<crate::latest_capture_store::LatestCaptureStore>()
+            .get()
+            .filter(|p| p.request_id == request_id)
+        else {
+            return Ok(false);
+        };
+        // Capture only the foreground window identity for safe non-activating display.
+        let context = if payload.phase == CapturePhase::TranslationFailed {
+            Some(ForegroundContext::capture().map_err(|e| e.to_string())?)
+        } else {
+            None
+        };
+        let action = self.task().retry(request_id, Some(&payload))?;
+        let (request, source) = match action {
+            RetryAction::Ignore => return Ok(false),
+            RetryAction::Capture(request) => {
+                self.overlay.begin_request(request.id);
+                drop(guard);
+                self.trigger_capture(app, request);
+                return Ok(true);
+            }
+            RetryAction::Translate(request, source) => (request, source),
+        };
+        let context = context.expect("translation retry has captured foreground identity");
+        self.overlay.begin_request(request.id);
+        payload.request_id = request.id;
+        payload.phase = CapturePhase::Translating;
+        payload.success = false;
+        payload.text.clear();
+        payload.tone_note = None;
+        payload.error_code = None;
+        payload.error_message = None;
+        payload.elapsed_ms = 0;
+        let anchor = payload.selection_rect.unwrap_or_else(cursor_anchor);
+        if !self.overlay.show_retry(&app, &payload, &context, anchor)? {
+            return Ok(false);
+        }
+        self.start_translation(app, request, payload, source, Instant::now(), None);
+        Ok(true)
+    }
+
+    // Callers hold coordination through task registration and display commit.
+    // The task state guard is released before spawning or touching the window.
     fn start_translation(
         &self,
         app: AppHandle,
@@ -458,6 +561,11 @@ impl CaptureCoordinator {
         started: Instant,
         mut display_ready: Option<tauri::async_runtime::Receiver<()>>,
     ) {
+        if let Ok(context) = ForegroundContext::capture() {
+            let config = app.state::<ModelConfigStore>().get();
+            self.task()
+                .started(&request, translation_request.clone(), config, context);
+        }
         let coordinator = self.clone();
         tauri::async_runtime::spawn(async move {
             let service = app.state::<TranslationService>().inner().clone();
@@ -465,7 +573,7 @@ impl CaptureCoordinator {
             let model_started = Instant::now();
             let result = service.translate(&translation_request).await;
             let model_elapsed_ms = model_started.elapsed().as_millis();
-            if !coordinator.sessions.is_current(&request) {
+            if !coordinator.task().is_current(&request) {
                 return;
             }
             if let Some(receiver) = display_ready.as_mut()
@@ -482,17 +590,34 @@ impl CaptureCoordinator {
                 );
                 return;
             }
-            if !coordinator.sessions.is_current(&request) {
+            if !coordinator.task().is_current(&request) {
                 return;
             }
 
+            let _coordination = coordinator
+                .coordination
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if !coordinator.task().complete(
+                &request,
+                result.as_ref().err().map(|_| &translation_request),
+            ) {
+                return;
+            }
             let mut final_payload = base_payload;
             final_payload.elapsed_ms = started.elapsed().as_millis();
+            let mut explanation_request = None;
             match result {
                 Ok(translation) => {
+                    explanation_request = ExplanationRequest::from_translation(
+                        request.id,
+                        &translation_request,
+                        translation.text.clone(),
+                    );
                     final_payload.phase = CapturePhase::Translated;
                     final_payload.success = true;
-                    final_payload.text = translation;
+                    final_payload.text = translation.text;
+                    final_payload.tone_note = translation.tone_note;
                     final_payload.error_code = None;
                     final_payload.error_message = None;
                     info!(
@@ -525,17 +650,22 @@ impl CaptureCoordinator {
                 }
             }
 
-            if coordinator.overlay.update(&app, &final_payload).is_err()
-                && coordinator.sessions.is_current(&request)
+            match coordinator
+                .overlay
+                .update(&app, &final_payload, explanation_request)
             {
-                warn!(
-                    application = %final_payload.application_name,
-                    capture_method = "model-translation",
-                    text_length = 0,
-                    elapsed_ms = final_payload.elapsed_ms,
-                    error_code = "OVERLAY_UPDATE_FAILED",
-                    "translation result could not update the overlay"
-                );
+                Ok(()) => {}
+                Err(_) if coordinator.task().is_current(&request) => {
+                    warn!(
+                        application = %final_payload.application_name,
+                        capture_method = "model-translation",
+                        text_length = 0,
+                        elapsed_ms = final_payload.elapsed_ms,
+                        error_code = "OVERLAY_UPDATE_FAILED",
+                        "translation result could not update the overlay"
+                    );
+                }
+                Err(_) => {}
             }
         });
     }
@@ -588,7 +718,11 @@ fn run_pipeline(
                     warning_code: capture.warning_code,
                 }),
                 Err(failure) => Err(PipelineFailure {
-                    code: failure.code,
+                    code: if empty_selection_failure(&uia_failure.code, &failure.code) {
+                        "NO_TEXT_SELECTED".into()
+                    } else {
+                        failure.code
+                    },
                     message: failure.message,
                     source: CLIPBOARD_METHOD.to_owned(),
                     clipboard_restored: Some(failure.restored),
@@ -629,6 +763,11 @@ fn should_try_clipboard(failure: &SelectionFailure) -> bool {
         )
 }
 
+fn empty_selection_failure(uia_code: &str, clipboard_code: &str) -> bool {
+    clipboard_code == "CLIPBOARD_TEXT_EMPTY"
+        || (uia_code == "NO_TEXT_SELECTED" && clipboard_code == "CLIPBOARD_SEQUENCE_UNCHANGED")
+}
+
 fn can_commit(is_current: bool, foreground_unchanged: bool) -> bool {
     is_current && foreground_unchanged
 }
@@ -640,6 +779,29 @@ fn should_prestart_translation(backend: ModelBackend) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn empty_selection_hint_does_not_mask_capture_errors() {
+        assert!(empty_selection_failure(
+            "NO_TEXT_SELECTED",
+            "CLIPBOARD_SEQUENCE_UNCHANGED"
+        ));
+        assert!(empty_selection_failure(
+            "TEXT_PATTERN_UNSUPPORTED",
+            "CLIPBOARD_TEXT_EMPTY"
+        ));
+        assert!(!empty_selection_failure(
+            "TEXT_PATTERN_UNSUPPORTED",
+            "CLIPBOARD_SEQUENCE_UNCHANGED"
+        ));
+        assert!(!empty_selection_failure(
+            "NO_TEXT_SELECTED",
+            "CLIPBOARD_TIMEOUT"
+        ));
+        assert!(!empty_selection_failure(
+            "NO_TEXT_SELECTED",
+            "FOREGROUND_CHANGED"
+        ));
+    }
 
     fn failure(code: &str, recoverable: bool) -> SelectionFailure {
         SelectionFailure {

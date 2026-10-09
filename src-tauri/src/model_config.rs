@@ -33,6 +33,8 @@ pub struct EndpointConfig {
 pub struct ModelConfig {
     pub backend: ModelBackend,
     pub mode: TranslationMode,
+    #[serde(default = "selection_icon_enabled_by_default")]
+    pub selection_icon_enabled: bool,
     #[serde(default)]
     pub reasoning_enabled: bool,
     pub local: EndpointConfig,
@@ -49,6 +51,7 @@ impl Default for ModelConfig {
         Self {
             backend: ModelBackend::Local,
             mode: TranslationMode::Conversational,
+            selection_icon_enabled: true,
             reasoning_enabled: false,
             local: EndpointConfig {
                 base_url: "http://127.0.0.1:11434/v1".to_owned(),
@@ -100,6 +103,18 @@ pub struct ModelConfigStore {
 }
 
 impl ModelConfigStore {
+    #[cfg(debug_assertions)]
+    pub(crate) fn isolated_for_acceptance(
+        path: PathBuf,
+        config: ModelConfig,
+    ) -> Result<Self, String> {
+        let store = Self {
+            path,
+            inner: Arc::new(RwLock::new(config.clone())),
+        };
+        store.write_config(&config)?;
+        Ok(store)
+    }
     pub fn load(app: &AppHandle) -> Result<Self, String> {
         let directory = app
             .path()
@@ -108,12 +123,18 @@ impl ModelConfigStore {
         let path = directory.join(MODEL_CONFIG_FILENAME);
         migrate_legacy_model_config(&path)?;
         fs::create_dir_all(&directory).map_err(|error| format!("无法创建配置目录：{error}"))?;
+        Self::load_from_path(path)
+    }
+
+    pub(crate) fn load_from_path(path: PathBuf) -> Result<Self, String> {
         let mut config = if path.exists() {
             let bytes = fs::read(&path).map_err(|error| format!("无法读取模型配置：{error}"))?;
             serde_json::from_slice(&bytes).map_err(|error| format!("模型配置格式无效：{error}"))?
         } else {
             ModelConfig::default()
         };
+        // Each new process starts enabled; tray toggles still apply for the current session.
+        config.selection_icon_enabled = true;
         remember_local_model(&mut config);
         remember_api_model(&mut config);
         Ok(Self {
@@ -141,20 +162,47 @@ impl ModelConfigStore {
         }
         config.backend = backend;
         validate_config_without_active_model(&config)?;
-        self.persist(config.clone())?;
-        Ok(config)
+        self.persist(config)?;
+        Ok(self.get())
     }
 
-    fn persist(&self, config: ModelConfig) -> Result<(), String> {
+    pub fn set_selection_icon_enabled(&self, enabled: bool) -> Result<(), String> {
+        let mut current = self
+            .inner
+            .write()
+            .unwrap_or_else(|error| error.into_inner());
+        if current.selection_icon_enabled == enabled {
+            return Ok(());
+        }
+        let mut next = current.clone();
+        next.selection_icon_enabled = enabled;
+        self.write_config(&next)?;
+        *current = next;
+        Ok(())
+    }
+
+    fn persist(&self, mut config: ModelConfig) -> Result<(), String> {
+        let mut current = self
+            .inner
+            .write()
+            .unwrap_or_else(|error| error.into_inner());
+        // Settings and mode saves may have been prepared before a tray toggle.
+        config.selection_icon_enabled = current.selection_icon_enabled;
+        self.write_config(&config)?;
+        *current = config;
+        Ok(())
+    }
+
+    fn write_config(&self, config: &ModelConfig) -> Result<(), String> {
         let data = serde_json::to_vec_pretty(&config)
             .map_err(|error| format!("无法序列化模型配置：{error}"))?;
         fs::write(&self.path, data).map_err(|error| format!("无法保存模型配置：{error}"))?;
-        *self
-            .inner
-            .write()
-            .unwrap_or_else(|error| error.into_inner()) = config;
         Ok(())
     }
+}
+
+fn selection_icon_enabled_by_default() -> bool {
+    true
 }
 
 pub fn remember_api_model(config: &mut ModelConfig) {
@@ -299,6 +347,7 @@ mod tests {
     #[test]
     fn default_uses_confirmed_product_terms() {
         assert_eq!(ModelConfig::default().mode, TranslationMode::Conversational);
+        assert!(ModelConfig::default().selection_icon_enabled);
     }
 
     #[test]
@@ -375,6 +424,109 @@ mod tests {
 
         assert!(config.api_models.is_empty());
         assert!(config.local_models.is_empty());
+        assert!(config.selection_icon_enabled);
+    }
+
+    #[test]
+    fn selection_icon_preference_survives_other_config_saves_within_session() {
+        let root = temporary_test_directory("selection-icon-preference");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join(MODEL_CONFIG_FILENAME);
+        let store = ModelConfigStore {
+            path: path.clone(),
+            inner: Arc::new(RwLock::new(valid())),
+        };
+        store.set_selection_icon_enabled(false).unwrap();
+        let mut stale_model_edit = valid();
+        stale_model_edit.local.model = "new-model".to_owned();
+        store.save(stale_model_edit).unwrap();
+        let mut mode_edit = store.get();
+        mode_edit.mode = TranslationMode::Academic;
+        store.save(mode_edit).unwrap();
+        store.select_backend(ModelBackend::Api).unwrap();
+
+        let reloaded: ModelConfig = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(!reloaded.selection_icon_enabled);
+        assert_eq!(reloaded.local.model, "new-model");
+        assert_eq!(reloaded.mode, TranslationMode::Academic);
+        assert_eq!(reloaded.backend, ModelBackend::Api);
+        assert!(!store.get().selection_icon_enabled);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn startup_enables_selection_icon_without_rewriting_saved_config() {
+        let root = temporary_test_directory("selection-icon-startup");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join(MODEL_CONFIG_FILENAME);
+        let mut saved = valid();
+        saved.selection_icon_enabled = false;
+        saved.backend = ModelBackend::Api;
+        saved.mode = TranslationMode::Academic;
+        saved.reasoning_enabled = true;
+        saved.timeout_seconds = 90;
+        saved.api.base_url = "https://api.anthropic.com/v1".to_owned();
+        saved
+            .local_models
+            .insert("lmstudio".into(), "other-local".into());
+        saved.api_models.insert("openai".into(), "other-api".into());
+        remember_local_model(&mut saved);
+        remember_api_model(&mut saved);
+        let original = serde_json::to_vec_pretty(&saved).unwrap();
+        fs::write(&path, &original).unwrap();
+
+        let loaded = ModelConfigStore::load_from_path(path.clone())
+            .unwrap()
+            .get();
+        let bytes_after_load = fs::read(&path).unwrap();
+        fs::remove_dir_all(root).unwrap();
+
+        saved.selection_icon_enabled = true;
+        assert_eq!(loaded, saved);
+        assert_eq!(bytes_after_load, original);
+    }
+
+    #[test]
+    fn startup_without_config_stays_enabled_without_creating_a_file() {
+        let root = temporary_test_directory("selection-icon-first-startup");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join(MODEL_CONFIG_FILENAME);
+        let loaded = ModelConfigStore::load_from_path(path.clone())
+            .unwrap()
+            .get();
+        let file_created = path.exists();
+        fs::remove_dir_all(root).unwrap();
+
+        assert_eq!(loaded, ModelConfig::default());
+        assert!(!file_created);
+    }
+
+    #[test]
+    fn startup_keeps_invalid_config_errors_and_contents() {
+        let root = temporary_test_directory("selection-icon-invalid-config");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join(MODEL_CONFIG_FILENAME);
+        let original = b"invalid synthetic configuration";
+        fs::write(&path, original).unwrap();
+        let result = ModelConfigStore::load_from_path(path.clone());
+        let bytes_after_load = fs::read(&path).unwrap();
+        fs::remove_dir_all(root).unwrap();
+
+        assert!(matches!(result, Err(error) if error.starts_with("模型配置格式无效：")));
+        assert_eq!(bytes_after_load, original);
+    }
+
+    #[test]
+    fn failed_preference_save_keeps_the_previous_state() {
+        let root = temporary_test_directory("selection-icon-write-failure");
+        fs::create_dir_all(&root).unwrap();
+        let store = ModelConfigStore {
+            path: root.clone(), // Writing a file over a directory always fails.
+            inner: Arc::new(RwLock::new(valid())),
+        };
+        assert!(store.set_selection_icon_enabled(false).is_err());
+        assert!(store.get().selection_icon_enabled);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

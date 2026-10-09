@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import "../shared/uiFonts";
 import {
   onTrayFeedbackDismiss,
   onTrayFeedbackShow,
@@ -9,6 +10,7 @@ type FeedbackPhase = "hidden" | "visible" | "leaving";
 
 export function TrayFeedback() {
   const [message, setMessage] = useState("");
+  const [mode, setMode] = useState<"conversational" | "academic">("conversational");
   const [phase, setPhase] = useState<FeedbackPhase>("hidden");
   const [animationKey, setAnimationKey] = useState(0);
   const generation = useRef(0);
@@ -23,6 +25,7 @@ export function TrayFeedback() {
       }
       generation.current = payload.generation;
       setMessage(payload.message);
+      setMode(payload.mode);
       setAnimationKey(payload.generation);
       setPhase("visible");
     }).then((unlisten) => {
@@ -53,8 +56,8 @@ export function TrayFeedback() {
 
   return (
     <main className={`tray-feedback-stage tray-feedback-stage--${phase}`}>
-      <div key={animationKey} className="tray-feedback-pill" role="status">
-        {message}
+      <div key={animationKey} className="tray-feedback-pill" data-mode={mode} role="status">
+        <span className="tray-feedback-label">{message}</span>
       </div>
     </main>
   );

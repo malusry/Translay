@@ -9,6 +9,7 @@ use crate::{
         OVERLAY_SHORT_HIDE_DELAY,
     },
     models::{CapturePayload, CapturePhase, ScreenRect},
+    translation::TranslationMode,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,6 +61,10 @@ impl DismissalClock {
     }
 
     pub(crate) fn should_hide(&mut self, now: Instant, hovered: bool) -> bool {
+        // Preserve the original reading period regardless of early interaction.
+        if now < self.initial_deadline {
+            return false;
+        }
         if hovered {
             self.hover_mode = true;
             self.leave_deadline = None;
@@ -86,36 +91,72 @@ pub(crate) fn calculate_overlay_position(
 ) -> OverlayPlacement {
     let max_x = (work_area.right - overlay_width).max(work_area.left);
     let max_y = (work_area.bottom - overlay_height).max(work_area.top);
-
+    // Capture providers can return a selection spanning monitors or off-screen text.
+    // Anchor to the visible portion on the monitor chosen by monitor_metrics.
+    let selection = ScreenRect {
+        left: selection.left.clamp(work_area.left, work_area.right),
+        right: selection.right.clamp(work_area.left, work_area.right),
+        top: selection.top.clamp(work_area.top, work_area.bottom),
+        bottom: selection.bottom.clamp(work_area.top, work_area.bottom),
+    };
+    let x = selection.left.clamp(work_area.left, max_x);
+    let y = selection.top.clamp(work_area.top, max_y);
+    // Slide along the edge before changing sides. In particular, right-edge
+    // selections should still get a panel below them when vertical space permits.
     let candidates = [
-        (selection.left, selection.bottom.saturating_add(gap)),
+        (x, selection.bottom.saturating_add(gap)),
         (
-            selection.left,
-            selection.top.saturating_sub(gap + overlay_height),
+            x,
+            selection
+                .top
+                .saturating_sub(gap.saturating_add(overlay_height)),
         ),
-        (selection.right.saturating_add(gap), selection.top),
+        (selection.right.saturating_add(gap), y),
         (
-            selection.left.saturating_sub(gap + overlay_width),
-            selection.top,
+            selection
+                .left
+                .saturating_sub(gap.saturating_add(overlay_width)),
+            y,
         ),
     ];
-
     for (x, y) in candidates {
-        if x >= work_area.left
-            && y >= work_area.top
-            && x.saturating_add(overlay_width) <= work_area.right
-            && y.saturating_add(overlay_height) <= work_area.bottom
-        {
+        if x >= work_area.left && x <= max_x && y >= work_area.top && y <= max_y {
             return OverlayPlacement { x, y };
         }
     }
 
+    // No side fits: compare actual overlap after moving each candidate into view.
+    // Stable candidate order breaks ties, retaining the usual below-first behavior.
+    candidates
+        .into_iter()
+        .map(|(x, y)| OverlayPlacement {
+            x: x.clamp(work_area.left, max_x),
+            y: y.clamp(work_area.top, max_y),
+        })
+        .min_by_key(|p| {
+            let overlap_width = (p.x.saturating_add(overlay_width).min(selection.right)
+                - p.x.max(selection.left))
+            .max(0) as i64;
+            let overlap_height = (p.y.saturating_add(overlay_height).min(selection.bottom)
+                - p.y.max(selection.top))
+            .max(0) as i64;
+            overlap_width * overlap_height
+        })
+        .unwrap()
+}
+
+pub(crate) fn clamp_overlay_position(
+    current_x: i32,
+    current_y: i32,
+    work_area: ScreenRect,
+    overlay_width: i32,
+    overlay_height: i32,
+) -> OverlayPlacement {
+    let max_x = (work_area.right - overlay_width).max(work_area.left);
+    let max_y = (work_area.bottom - overlay_height).max(work_area.top);
     OverlayPlacement {
-        x: selection.left.clamp(work_area.left, max_x),
-        y: selection
-            .bottom
-            .saturating_add(gap)
-            .clamp(work_area.top, max_y),
+        x: current_x.clamp(work_area.left, max_x),
+        y: current_y.clamp(work_area.top, max_y),
     }
 }
 
@@ -129,6 +170,14 @@ pub(crate) fn overlay_logical_size(
     payload: &CapturePayload,
     maximum_width: i32,
 ) -> OverlayLogicalSize {
+    if payload.phase == CapturePhase::CaptureFailed
+        && payload.error_code.as_deref() == Some("NO_TEXT_SELECTED")
+    {
+        return OverlayLogicalSize {
+            width: 188.min(maximum_width.max(1)),
+            height: 88,
+        };
+    }
     let maximum_width = maximum_width
         .max(OVERLAY_MIN_WIDTH)
         .min(OVERLAY_RESULT_MAX_WIDTH);
@@ -149,12 +198,29 @@ pub(crate) fn overlay_logical_size(
             }
         }
         CapturePhase::Translated => {
-            let compact = !payload.text.contains('\n')
+            let tone_note = payload
+                .tone_note
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+                .filter(|_| {
+                    payload.success
+                        && payload.translation_mode == Some(TranslationMode::Conversational)
+                });
+            let compact = tone_note.is_none()
+                && !payload.text.contains('\n')
                 && payload.text.chars().count() <= OVERLAY_COMPACT_MAX_CHARS;
             let text_width = estimated_line_width(&payload.text);
             if compact {
+                let explanation_action_width = if payload.success
+                    && matches!(payload.translation_mode, Some(TranslationMode::Academic))
+                {
+                    26
+                } else {
+                    0
+                };
                 return OverlayLogicalSize {
-                    width: (text_width + 156).clamp(OVERLAY_MIN_WIDTH, maximum_width),
+                    width: (text_width + 156 + explanation_action_width)
+                        .clamp(OVERLAY_MIN_WIDTH, maximum_width),
                     height: OVERLAY_COMPACT_HEIGHT,
                 };
             }
@@ -164,8 +230,12 @@ pub(crate) fn overlay_logical_size(
             let lines = estimated_wrapped_lines(&payload.text, content_width).clamp(1, 10) as i32;
             OverlayLogicalSize {
                 width,
-                height: (70 + lines * 23)
-                    .clamp(OVERLAY_RESULT_MIN_HEIGHT, OVERLAY_RESULT_MAX_HEIGHT),
+                height: (70
+                    + lines * 23
+                    + tone_note.map_or(0, |note| {
+                        18 + estimated_wrapped_lines(note, content_width) as i32 * 18
+                    }))
+                .clamp(OVERLAY_RESULT_MIN_HEIGHT, OVERLAY_RESULT_MAX_HEIGHT),
             }
         }
     }
@@ -201,6 +271,11 @@ fn estimated_wrapped_lines(text: &str, content_width: i32) -> usize {
 }
 
 pub(crate) fn auto_hide_delay(payload: &CapturePayload) -> Duration {
+    if payload.phase == CapturePhase::CaptureFailed
+        && payload.error_code.as_deref() == Some("NO_TEXT_SELECTED")
+    {
+        return Duration::from_secs(2);
+    }
     if payload.phase != CapturePhase::Translated {
         return OVERLAY_MEDIUM_HIDE_DELAY;
     }
@@ -232,6 +307,17 @@ pub(crate) fn scale_for_dpi(logical: i32, dpi: u32) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn empty_selection_hint_is_short_but_read_errors_keep_their_normal_timeout() {
+        let mut hint = payload(1, "");
+        hint.phase = CapturePhase::CaptureFailed;
+        hint.error_code = Some("NO_TEXT_SELECTED".into());
+        assert_eq!(auto_hide_delay(&hint), Duration::from_secs(2));
+        let size = overlay_logical_size(&hint, 600);
+        assert_eq!((size.width, size.height), (188, 88));
+        hint.error_code = Some("CLIPBOARD_TIMEOUT".into());
+        assert_eq!(auto_hide_delay(&hint), OVERLAY_MEDIUM_HIDE_DELAY);
+    }
     use super::*;
 
     const WORK: ScreenRect = ScreenRect {
@@ -315,6 +401,114 @@ mod tests {
     }
 
     #[test]
+    fn right_edge_slides_left_without_switching_to_the_side() {
+        let selection = ScreenRect {
+            left: 1800,
+            top: 200,
+            right: 1900,
+            bottom: 230,
+        };
+        assert_eq!(
+            calculate_overlay_position(selection, WORK, 430, 270, 12),
+            OverlayPlacement { x: 1490, y: 242 }
+        );
+    }
+
+    #[test]
+    fn bottom_right_uses_space_above_without_covering_selection() {
+        let selection = ScreenRect {
+            left: 1800,
+            top: 950,
+            right: 1900,
+            bottom: 990,
+        };
+        assert_eq!(
+            calculate_overlay_position(selection, WORK, 430, 270, 12),
+            OverlayPlacement { x: 1490, y: 668 }
+        );
+    }
+
+    #[test]
+    fn tall_selection_uses_side_space() {
+        let selection = ScreenRect {
+            left: 500,
+            top: 100,
+            right: 800,
+            bottom: 1000,
+        };
+        assert_eq!(
+            calculate_overlay_position(selection, WORK, 430, 270, 12),
+            OverlayPlacement { x: 812, y: 100 }
+        );
+    }
+
+    #[test]
+    fn crowded_selection_chooses_less_overlap_instead_of_always_below() {
+        let selection = ScreenRect {
+            left: 300,
+            top: 200,
+            right: 1700,
+            bottom: 1000,
+        };
+        assert_eq!(
+            calculate_overlay_position(selection, WORK, 430, 270, 12),
+            OverlayPlacement { x: 300, y: 0 }
+        );
+    }
+
+    #[test]
+    fn offscreen_selection_anchors_to_visible_portion() {
+        let selection = ScreenRect {
+            left: -900,
+            top: 200,
+            right: 600,
+            bottom: 230,
+        };
+        assert_eq!(
+            calculate_overlay_position(selection, WORK, 430, 270, 12),
+            OverlayPlacement { x: 0, y: 242 }
+        );
+    }
+
+    #[test]
+    fn placement_stays_inside_across_sizes_and_screen_positions() {
+        for width in [180, 430, 840, 1920] {
+            for height in [60, 270, 620, 1040] {
+                for x in (-200..=2200).step_by(100) {
+                    for y in (-200..=1200).step_by(100) {
+                        let selection = ScreenRect {
+                            left: x,
+                            top: y,
+                            right: x + 250,
+                            bottom: y + 80,
+                        };
+                        let p = calculate_overlay_position(selection, WORK, width, height, 12);
+                        assert!(
+                            p.x >= 0 && p.y >= 0 && p.x + width <= 1920 && p.y + height <= 1040
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn resized_overlay_keeps_its_position_when_it_still_fits() {
+        assert_eq!(
+            clamp_overlay_position(500, 200, WORK, 430, 560),
+            OverlayPlacement { x: 500, y: 200 }
+        );
+    }
+
+    #[test]
+    fn resized_overlay_moves_only_enough_to_remain_inside_the_work_area() {
+        assert_eq!(
+            clamp_overlay_position(1700, 820, WORK, 430, 560),
+            OverlayPlacement { x: 1490, y: 480 }
+        );
+    }
+
+    #[test]
     fn logical_overlay_size_scales_for_dpi() {
         assert_eq!(scale_for_dpi(430, 96), 430);
         assert_eq!(scale_for_dpi(430, 144), 645);
@@ -354,6 +548,36 @@ mod tests {
         let size = overlay_logical_size(&result, 400);
         assert_eq!(size.width, 400);
         assert!(size.height > OVERLAY_RESULT_MIN_HEIGHT);
+    }
+
+    #[test]
+    fn academic_compact_result_reserves_space_for_explanation_action() {
+        let conversational = payload(25, "学术模式短译文");
+        let mut academic = payload(26, "学术模式短译文");
+        academic.translation_mode = Some(crate::translation::TranslationMode::Academic);
+
+        let conversational_size = overlay_logical_size(&conversational, OVERLAY_RESULT_MAX_WIDTH);
+        let academic_size = overlay_logical_size(&academic, OVERLAY_RESULT_MAX_WIDTH);
+
+        assert_eq!(academic_size.width, conversational_size.width + 26);
+        assert_eq!(academic_size.height, conversational_size.height);
+    }
+
+    #[test]
+    fn conversational_note_reserves_height_without_changing_academic_layout() {
+        let mut daily = payload(27, "有道理。");
+        let compact = overlay_logical_size(&daily, OVERLAY_RESULT_MAX_WIDTH);
+        daily.tone_note = Some("口语中表示认可对方的判断。".to_owned());
+        let annotated = overlay_logical_size(&daily, OVERLAY_RESULT_MAX_WIDTH);
+        assert!(annotated.height > compact.height);
+        assert!(annotated.width >= 300);
+        daily.translation_mode = Some(TranslationMode::Academic);
+        let academic_with_note = overlay_logical_size(&daily, OVERLAY_RESULT_MAX_WIDTH);
+        daily.tone_note = None;
+        assert_eq!(
+            academic_with_note,
+            overlay_logical_size(&daily, OVERLAY_RESULT_MAX_WIDTH)
+        );
     }
 
     #[test]
@@ -442,33 +666,29 @@ mod tests {
     }
 
     #[test]
-    fn hover_replaces_the_initial_tier_with_a_fresh_leave_delay() {
+    fn early_hover_preserves_initial_deadline() {
         let started = Instant::now();
-        let mut clock = DismissalClock::new(started, OVERLAY_SHORT_HIDE_DELAY);
-
+        let mut clock = DismissalClock::new(started, Duration::from_secs(10));
         assert!(!clock.should_hide(started + Duration::from_secs(1), true));
         assert!(!clock.should_hide(started + Duration::from_secs(2), false));
-        assert!(!clock.should_hide(
-            started + Duration::from_secs(5) - Duration::from_millis(1),
-            false
-        ));
-        assert!(clock.should_hide(started + Duration::from_secs(5), false));
+        assert!(!clock.should_hide(started + Duration::from_secs(9), false));
+        assert!(clock.should_hide(started + Duration::from_secs(10), false));
     }
 
     #[test]
-    fn returning_to_the_overlay_restarts_the_leave_delay() {
+    fn expiry_waits_for_release_and_reentry_restarts_half_second_grace() {
         let started = Instant::now();
-        let mut clock = DismissalClock::new(started, OVERLAY_SHORT_HIDE_DELAY);
-
-        assert!(!clock.should_hide(started + Duration::from_secs(1), true));
-        assert!(!clock.should_hide(started + Duration::from_secs(2), false));
-        assert!(!clock.should_hide(started + Duration::from_secs(4), true));
-        assert!(!clock.should_hide(started + Duration::from_secs(5), false));
-        assert!(!clock.should_hide(
-            started + Duration::from_secs(8) - Duration::from_millis(1),
-            false
-        ));
-        assert!(clock.should_hide(started + Duration::from_secs(8), false));
+        let mut clock = DismissalClock::new(started, Duration::from_secs(10));
+        assert!(!clock.should_hide(started + Duration::from_secs(10), true));
+        assert!(!clock.should_hide(started + Duration::from_secs(30), true));
+        let left = started + Duration::from_secs(31);
+        assert!(!clock.should_hide(left, false));
+        assert!(!clock.should_hide(left + Duration::from_millis(499), false));
+        assert!(!clock.should_hide(left + Duration::from_millis(499), true));
+        let left_again = left + Duration::from_secs(1);
+        assert!(!clock.should_hide(left_again, false));
+        assert!(!clock.should_hide(left_again + Duration::from_millis(499), false));
+        assert!(clock.should_hide(left_again + Duration::from_millis(500), false));
     }
 
     fn payload(request_id: u64, text: &str) -> CapturePayload {
@@ -489,6 +709,7 @@ mod tests {
             warning_code: None,
             language_profile: Some(crate::translation::LanguageProfile::analyze(text)),
             translation_mode: Some(crate::translation::TranslationMode::Conversational),
+            tone_note: None,
         }
     }
 }

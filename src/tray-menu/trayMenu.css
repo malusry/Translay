@@ -1,0 +1,25 @@
+:root{color-scheme:light dark;--tm-surface:light-dark(#fafbf9,#252b29);--tm-ink:light-dark(#3d4642,#dce6df);--tm-soft:light-dark(#737e77,#a1b2a7);--tm-green:light-dark(#628975,#a5cbb6);--tm-line:light-dark(#71887920,#c4d5c51c);--tm-hover:light-dark(#dce9e15c,#a1cbb517);--tm-red:light-dark(#a2696f,#d6a1a8)}
+html,body,#root{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}
+.tray-menu-stage{box-sizing:border-box;width:100%;height:100%;padding:12px;font:13px/1.5 var(--font-interface);color:var(--tm-ink);user-select:none}
+.tray-menu{box-sizing:border-box;width:164px;max-width:100%;padding:4px;background:var(--tm-surface);border:1px solid var(--tm-line);border-radius:8px;box-shadow:0 6px 12px light-dark(#263d3010,#00000030),0 1px 3px light-dark(#253d3010,#00000026)}
+.tray-menu button{box-sizing:border-box;width:100%;height:28px;display:flex;align-items:center;gap:8px;padding:3px 8px;border:0;border-radius:4px;background:transparent;color:var(--tm-ink);font:inherit;text-align:left;cursor:default;transition:background 100ms ease,color 100ms ease}
+.tray-menu button:hover:not(:disabled),.tray-menu[data-keyboard="true"] button:focus{background:var(--tm-hover)}
+.tray-menu[data-keyboard="true"] button:focus{outline:1px solid var(--tm-green);outline-offset:-1px}
+.tray-menu button:disabled{opacity:.42}
+.tray-menu svg{width:15px;height:15px;flex:0 0 15px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--tm-soft)}
+.tray-menu-check{margin-left:auto;display:flex}
+.tray-menu-check svg{color:var(--tm-green);stroke-width:1.8}
+.tray-menu-check[data-checked="false"]{visibility:hidden}
+.tray-menu-divider{height:1px;background:var(--tm-line);margin:3px 8px}
+.tray-menu-settings span{font-family:var(--font-display);font-weight:400}
+.tray-menu button.tray-menu-quit:hover,.tray-menu[data-keyboard="true"] button.tray-menu-quit:focus{color:var(--tm-red);background:light-dark(#b1778010,#d596a311)}
+.tray-menu-quit:hover svg{color:var(--tm-red)}
+@media(prefers-reduced-motion:reduce){.tray-menu button{transition:none}}
+@media(forced-colors:active){.tray-menu{border-color:CanvasText}.tray-menu[data-keyboard="true"] button:focus{outline-color:Highlight}}
+
+.tray-menu:focus,.tray-menu button:focus{outline:none}
+.tray-menu[data-keyboard="true"] button:focus{outline:1px solid var(--tm-green);outline-offset:-1px}
+.tray-menu button:active:not(:disabled){background:light-dark(#cbded2,#426052)}
+
+
+

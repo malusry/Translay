@@ -9,11 +9,12 @@ export default defineConfig({
     strictPort: true,
     host: "127.0.0.1",
     watch: {
-      ignored: ["**/src-tauri/**"]
+      ignored: ["**/src-tauri/**", "**/tests/artifacts/**", "**/release/**"]
     }
   },
   envPrefix: ["VITE_", "TAURI_"],
   build: {
+    rollupOptions: { input: { main: "index.html", startup: "startup.html" } },
     target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
     minify: !process.env.TAURI_ENV_DEBUG,
     sourcemap: Boolean(process.env.TAURI_ENV_DEBUG)

@@ -66,6 +66,8 @@ pub struct CapturePayload {
     pub warning_code: Option<String>,
     pub language_profile: Option<LanguageProfile>,
     pub translation_mode: Option<TranslationMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tone_note: Option<String>,
 }
 
 #[derive(Clone, Debug)]

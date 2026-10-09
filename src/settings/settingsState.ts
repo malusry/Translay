@@ -279,7 +279,44 @@ export function connectionFeedbackMessage(
   if (result.success) {
     return `连接成功 · ${result.elapsedMs} ms`;
   }
-  return result.message.trim() || "连接失败";
+  return connectionErrorMessage(result.message);
+}
+
+export function connectionErrorMessage(error: unknown): string {
+  let detail: string;
+  if (error instanceof Error) {
+    detail = error.message;
+  } else if (typeof error === "string") {
+    detail = error;
+  } else {
+    try {
+      detail = JSON.stringify(error) ?? "";
+    } catch {
+      detail = String(error);
+    }
+  }
+  detail = detail.trim();
+  if (!detail) return "连接失败，未收到可用的错误信息";
+
+  // Explain bare diagnostics only; preserve provider prose and full raw details.
+  const http = /^HTTP\s+(\d{3})$/i.exec(detail);
+  const httpHints: Record<string, string> = {
+    "401": "认证未通过，请检查 API Key",
+    "403": "服务拒绝访问，请检查模型权限",
+    "404": "服务地址或模型不存在，请检查配置",
+    "408": "服务响应超时",
+    "429": "请求受限，请稍后再试",
+  };
+  const networkHints: Record<string, string> = {
+    ECONNREFUSED: "服务拒绝连接，请确认服务已启动及地址正确",
+    ENOTFOUND: "无法解析服务地址，请检查地址与网络",
+    ETIMEDOUT: "连接超时，请检查服务与网络",
+  };
+  const hint = http
+    ? httpHints[http[1]] ?? (http[1].startsWith("5") ? "服务端暂时无法处理请求" : undefined)
+    : networkHints[detail.toUpperCase()];
+  if (hint) return `连接失败 · ${hint}（${detail}）`;
+  return detail.startsWith("连接失败") ? detail : `连接失败 · ${detail}`;
 }
 
 export function reasoningDescriptionForConfig(

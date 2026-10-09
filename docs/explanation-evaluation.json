@@ -1,0 +1,266 @@
+{
+  "model": "deepseek-v4-flash",
+  "reasoningEnabled": false,
+  "promptSha256": "04f6c80afc3a197ac371af3925c4f407c0ec74c56df81c2a6a5791e2aa18010b",
+  "scope": "Synthetic cases; direct configured-provider requests using production prompt and input schema, not native capture end-to-end.",
+  "results": [
+    {
+      "id": 1,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "The estimate is approximate.",
+        "translation": "估计值是近似的。"
+      },
+      "inPromptExample": true,
+      "rawOutput": "{\"coreExplanation\":\"这个估计值并非精确值，应把它理解为一个近似结果。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这个估计值并非精确值，应把它理解为一个近似结果。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.54,
+      "review": {
+        "status": "pass",
+        "note": "简单解释，无多余栏目。"
+      }
+    },
+    {
+      "id": 2,
+      "input": {
+        "inputKind": "termOrPhrase",
+        "sourceText": "power",
+        "translation": "统计功效",
+        "contextBefore": "The test detects a true effect with probability 0.8."
+      },
+      "inPromptExample": true,
+      "rawOutput": "{\"coreExplanation\":\"这里的 power 指统计检验在备择假设为真时正确拒绝原假设的概率，即统计功效；上下文中的 0.8 表示在该条件下检出真实效应的概率为 80%。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这里的 power 指统计检验在备择假设为真时正确拒绝原假设的概率，即统计功效；上下文中的 0.8 表示在该条件下检出真实效应的概率为 80%。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.67,
+      "review": {
+        "status": "needsPolish",
+        "note": "消歧正确，但引入原假设、备择假设后比样例所需更难懂。"
+      }
+    },
+    {
+      "id": 3,
+      "input": {
+        "inputKind": "termOrPhrase",
+        "sourceText": "selection bias",
+        "translation": "选择偏差",
+        "contextBefore": "Only volunteers were included."
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这里的 selection bias 指因抽样或纳入方式不当（例如只纳入志愿者）而导致的系统性偏差：样本不能代表总体，从而可能使基于样本得到的结论出现系统性偏离。上下文中的“只纳入志愿者”正是造成这种偏差的典型情形。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这里的 selection bias 指因抽样或纳入方式不当（例如只纳入志愿者）而导致的系统性偏差：样本不能代表总体，从而可能使基于样本得到的结论出现系统性偏离。上下文中的“只纳入志愿者”正是造成这种偏差的典型情形。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 1.01,
+      "review": {
+        "status": "fail",
+        "note": "重复志愿者信息；将可能的代表性不足写成确定事实。"
+      }
+    },
+    {
+      "id": 4,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "X is associated with Y, but causality has not been established.",
+        "translation": "X 与 Y 相关，但尚未确立因果关系。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这句话指出 X 与 Y 之间存在统计关联，但明确表示这种关联并不等同于因果关系，即目前还不能断定是 X 导致了 Y。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这句话指出 X 与 Y 之间存在统计关联，但明确表示这种关联并不等同于因果关系，即目前还不能断定是 X 导致了 Y。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.87,
+      "review": {
+        "status": "pass",
+        "note": "保留关联与因果的区别。"
+      }
+    },
+    {
+      "id": 5,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "The method converges if the objective is convex.",
+        "translation": "如果目标函数是凸的，该方法就会收敛。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这句话指出该方法的收敛性是有条件的，其成立的前提是目标函数满足凸性；也就是说，只有在目标函数为凸函数的情况下，才能保证该方法收敛。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这句话指出该方法的收敛性是有条件的，其成立的前提是目标函数满足凸性；也就是说，只有在目标函数为凸函数的情况下，才能保证该方法收敛。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.68,
+      "review": {
+        "status": "fail",
+        "note": "把 if 解释为只有在，错误强化为必要条件。"
+      }
+    },
+    {
+      "id": 6,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "Not all participants improved.",
+        "translation": "并非所有参与者都有改善。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这句话表示参与者中有人改善，但也有人没有改善，即改善并非适用于每个人的普遍情况。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这句话表示参与者中有人改善，但也有人没有改善，即改善并非适用于每个人的普遍情况。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.66,
+      "review": {
+        "status": "fail",
+        "note": "无依据断言有人改善；not all 只能确定至少一人未改善。"
+      }
+    },
+    {
+      "id": 7,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "This reduces the variance.",
+        "translation": "这降低了方差。",
+        "contextBefore": "We average independent measurements."
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这里的“降低方差”指的是通过某种处理（例如对独立测量求平均）来减小结果的离散程度或波动性，从而使估计更稳定、更接近真实值。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这里的“降低方差”指的是通过某种处理（例如对独立测量求平均）来减小结果的离散程度或波动性，从而使估计更稳定、更接近真实值。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.81,
+      "review": {
+        "status": "fail",
+        "note": "方差降低不保证更接近真实值，且未直接解析 This 的指代。"
+      }
+    },
+    {
+      "id": 8,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "This supports the claim.",
+        "translation": "这支持了该主张。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这句话表示，前文所述的内容或证据为某个主张提供了支持，即有助于确认或强化该主张的可信度。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这句话表示，前文所述的内容或证据为某个主张提供了支持，即有助于确认或强化该主张的可信度。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.66,
+      "review": {
+        "status": "fail",
+        "note": "缺少具体指代无法确定的提示。"
+      }
+    },
+    {
+      "id": 9,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "The 95% confidence interval excludes zero.",
+        "translation": "95% 置信区间不包含零。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这句话说明，按通常的推断标准，该区间估计结果具有统计显著性；也就是说，基于此数据，我们可以在约 95% 的置信水平下拒绝总体效应为零的假设。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这句话说明，按通常的推断标准，该区间估计结果具有统计显著性；也就是说，基于此数据，我们可以在约 95% 的置信水平下拒绝总体效应为零的假设。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.92,
+      "review": {
+        "status": "needsPolish",
+        "note": "未说明区间与检验的对应条件，拒绝假设的说法过于笼统。"
+      }
+    },
+    {
+      "id": 10,
+      "input": {
+        "inputKind": "mathematicalExpression",
+        "sourceText": "$y=ax+b$",
+        "translation": "$y=ax+b$",
+        "contextBefore": "a is the slope and b is the intercept."
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这个式子表示一个线性关系：y 等于 a 乘以 x 再加上 b。其中 a 是斜率，决定 y 随 x 变化的快慢和方向；b 是截距，即 x 为 0 时 y 的取值。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这个式子表示一个线性关系：y 等于 a 乘以 x 再加上 b。其中 a 是斜率，决定 y 随 x 变化的快慢和方向；b 是截距，即 x 为 0 时 y 的取值。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.75,
+      "review": {
+        "status": "pass",
+        "note": "线性关系和符号解释清楚。"
+      }
+    },
+    {
+      "id": 11,
+      "input": {
+        "inputKind": "mathematicalExpression",
+        "sourceText": "We divide the scores by $\\sqrt{d_k}$ before softmax.",
+        "translation": "我们先将分数除以 $\\sqrt{d_k}$，再进行 softmax。",
+        "contextBefore": "d_k is the key dimension."
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这一步先对分数做缩放：每个分数都除以键向量维度的平方根 $\\\\sqrt{d_k}$，然后再送入 softmax 运算。缩放的目的通常在于调节输入数值的量级，使后续的 softmax 分布不至于因维度过大而过于尖锐。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这一步先对分数做缩放：每个分数都除以键向量维度的平方根 $\\sqrt{d_k}$，然后再送入 softmax 运算。缩放的目的通常在于调节输入数值的量级，使后续的 softmax 分布不至于因维度过大而过于尖锐。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 1.01,
+      "review": {
+        "status": "pass",
+        "note": "顺序和公式保留正确，解码后命令只有一个反斜杠；一般缩放动机以通常标示。"
+      }
+    },
+    {
+      "id": 12,
+      "input": {
+        "inputKind": "mathematicalExpression",
+        "sourceText": "√ab",
+        "translation": "$\\sqrt{ab}$"
+      },
+      "inPromptExample": true,
+      "rawOutput": "{\"coreExplanation\":\"这段表达式涉及平方根以及 a、b 两个符号。\",\"keyConcepts\":[],\"caveat\":\"仅凭提取文本无法确定 b 是否在根号内，译文给出的范围仍需对照原式确认。\"}",
+      "output": {
+        "coreExplanation": "这段表达式涉及平方根以及 a、b 两个符号。",
+        "keyConcepts": [],
+        "caveat": "仅凭提取文本无法确定 b 是否在根号内，译文给出的范围仍需对照原式确认。"
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.53,
+      "review": {
+        "status": "pass",
+        "note": "正确保留根号范围歧义；此例在提示词中。"
+      }
+    }
+  ],
+  "round": 1
+}

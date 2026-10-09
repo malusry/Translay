@@ -24,7 +24,7 @@ use windows::{
                 CUIAutomation8, IUIAutomation, IUIAutomationElement, IUIAutomationTextPattern,
                 IUIAutomationTextPattern2, IUIAutomationTextRange, IUIAutomationTextRangeArray,
                 TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start, TextUnit_Character,
-                UIA_DocumentControlTypeId, UIA_TextPattern2Id, UIA_TextPatternId,
+                TextUnit_Line, UIA_DocumentControlTypeId, UIA_TextPattern2Id, UIA_TextPatternId,
             },
             WindowsAndMessaging::GetCursorPos,
         },
@@ -44,10 +44,14 @@ use crate::{
 
 #[derive(Debug)]
 pub struct SelectionCapture {
+    #[cfg(debug_assertions)]
+    pub document_evidence: Option<crate::document_probe::Evidence>,
     pub text: String,
     pub context_before: Option<String>,
     pub context_after: Option<String>,
     pub rect: Option<ScreenRect>,
+    pub line_rects: Vec<ScreenRect>,
+    pub nearby_rects: Option<Vec<ScreenRect>>,
     pub method: &'static str,
 }
 
@@ -98,6 +102,41 @@ impl SelectionService {
         mouse_hint: Option<MouseSelectionHint>,
         capture_academic_context: bool,
     ) -> Result<SelectionCapture, SelectionFailure> {
+        Self::capture_internal(
+            context,
+            cancellation,
+            timeout,
+            mouse_hint,
+            capture_academic_context,
+            false,
+        )
+    }
+
+    pub fn capture_for_button(
+        context: ForegroundContext,
+        cancellation: std::sync::Arc<CancellationToken>,
+        timeout: Duration,
+        mouse_hint: Option<MouseSelectionHint>,
+        capture_academic_context: bool,
+    ) -> Result<SelectionCapture, SelectionFailure> {
+        Self::capture_internal(
+            context,
+            cancellation,
+            timeout,
+            mouse_hint,
+            capture_academic_context,
+            true,
+        )
+    }
+
+    fn capture_internal(
+        context: ForegroundContext,
+        cancellation: std::sync::Arc<CancellationToken>,
+        timeout: Duration,
+        mouse_hint: Option<MouseSelectionHint>,
+        capture_academic_context: bool,
+        button_geometry: bool,
+    ) -> Result<SelectionCapture, SelectionFailure> {
         let (sender, receiver) = mpsc::sync_channel(1);
         thread::Builder::new()
             .name("translay-uia-capture".into())
@@ -105,8 +144,13 @@ impl SelectionService {
                 if cancellation.is_cancelled() {
                     return;
                 }
-                let result =
-                    capture_selection(context, &cancellation, mouse_hint, capture_academic_context);
+                let result = capture_selection(
+                    context,
+                    &cancellation,
+                    mouse_hint,
+                    capture_academic_context,
+                    button_geometry.then_some(&sender),
+                );
                 if !cancellation.is_cancelled() {
                     let _ = sender.send(result);
                 }
@@ -120,6 +164,15 @@ impl SelectionService {
             })?;
 
         match receiver.recv_timeout(timeout) {
+            Ok(Ok(basic)) if button_geometry => {
+                // Optional neighboring geometry must not make valid text wait
+                // for a slow provider. Keep the basic capture after 80 ms.
+                Ok(receive_optional_geometry(
+                    &receiver,
+                    basic,
+                    Duration::from_millis(80),
+                ))
+            }
             Ok(result) => result,
             Err(mpsc::RecvTimeoutError::Timeout) => Err(SelectionFailure::static_error(
                 "UIA_TIMEOUT",
@@ -132,6 +185,17 @@ impl SelectionService {
                 true,
             )),
         }
+    }
+}
+
+fn receive_optional_geometry(
+    receiver: &mpsc::Receiver<Result<SelectionCapture, SelectionFailure>>,
+    basic: SelectionCapture,
+    budget: Duration,
+) -> SelectionCapture {
+    match receiver.recv_timeout(budget) {
+        Ok(Ok(enriched)) => enriched,
+        _ => basic,
     }
 }
 
@@ -174,6 +238,7 @@ fn capture_selection(
     cancellation: &CancellationToken,
     mouse_hint: Option<MouseSelectionHint>,
     capture_academic_context: bool,
+    button_progress: Option<&mpsc::SyncSender<Result<SelectionCapture, SelectionFailure>>>,
 ) -> Result<SelectionCapture, SelectionFailure> {
     let _apartment =
         ComApartment::initialize().map_err(|error| SelectionFailure::windows("COM_INIT", error))?;
@@ -188,6 +253,29 @@ fn capture_selection(
 
     let search_started = Instant::now();
     let mut candidates = Vec::new();
+    #[cfg(debug_assertions)]
+    if crate::document_probe::allows_background(&context) {
+        let documents = crate::document_probe::document_candidates(
+            &automation,
+            &root,
+            context.is_valid_and_foreground(),
+        );
+        if crate::document_probe::ambiguous_selection(&documents) {
+            return Err(SelectionFailure::static_error(
+                "PROBE_AMBIGUOUS_SELECTION",
+                "测试文档存在多个选区或读取不完整，不能确定归属",
+                false,
+            ));
+        }
+        for element in documents {
+            push_unique(
+                &automation,
+                &mut candidates,
+                element,
+                CandidateOrigin::RootSubtree,
+            );
+        }
+    }
 
     let focused_seed = unsafe { automation.GetFocusedElement() }
         .ok()
@@ -301,7 +389,11 @@ fn capture_selection(
                 false,
             ));
         }
-        if !context.is_valid_and_foreground() {
+        let foreground_valid = context.is_valid_and_foreground();
+        #[cfg(debug_assertions)]
+        let foreground_valid =
+            foreground_valid || crate::document_probe::allows_background(&context);
+        if !foreground_valid {
             return Err(SelectionFailure::static_error(
                 "FOREGROUND_CHANGED",
                 "选区捕获期间前台应用已改变",
@@ -325,8 +417,24 @@ fn capture_selection(
                 "UIA:TextPattern2",
                 mouse_hint,
                 capture_academic_context,
+                button_progress,
             ) {
-                Ok(capture) => return Ok(capture),
+                Ok(capture) => {
+                    #[cfg(debug_assertions)]
+                    let capture = {
+                        let mut capture = capture;
+                        if crate::document_probe::enabled() {
+                            capture.document_evidence = Some(crate::document_probe::inspect(
+                                &automation,
+                                &raw_walker,
+                                &candidate.element,
+                                &root,
+                            ));
+                        }
+                        capture
+                    };
+                    return Ok(capture);
+                }
                 Err(PatternReadError::Empty) => saw_empty_selection = true,
                 Err(PatternReadError::Windows(stage, error)) => {
                     last_provider_error = Some(SelectionFailure::windows(stage, error));
@@ -347,8 +455,24 @@ fn capture_selection(
                 "UIA:TextPattern",
                 mouse_hint,
                 capture_academic_context,
+                button_progress,
             ) {
-                Ok(capture) => return Ok(capture),
+                Ok(capture) => {
+                    #[cfg(debug_assertions)]
+                    let capture = {
+                        let mut capture = capture;
+                        if crate::document_probe::enabled() {
+                            capture.document_evidence = Some(crate::document_probe::inspect(
+                                &automation,
+                                &raw_walker,
+                                &candidate.element,
+                                &root,
+                            ));
+                        }
+                        capture
+                    };
+                    return Ok(capture);
+                }
                 Err(PatternReadError::Empty) => saw_empty_selection = true,
                 Err(PatternReadError::Windows(stage, error)) => {
                     last_provider_error = Some(SelectionFailure::windows(stage, error));
@@ -540,6 +664,7 @@ fn read_pattern_selection(
     method: &'static str,
     mouse_hint: Option<MouseSelectionHint>,
     capture_academic_context: bool,
+    button_progress: Option<&mpsc::SyncSender<Result<SelectionCapture, SelectionFailure>>>,
 ) -> Result<SelectionCapture, PatternReadError> {
     let ranges = unsafe { pattern.GetSelection() }
         .map_err(|error| PatternReadError::Windows("GET_SELECTION", error))?;
@@ -549,6 +674,7 @@ fn read_pattern_selection(
         method,
         mouse_hint,
         capture_academic_context,
+        button_progress,
     )
 }
 
@@ -558,6 +684,7 @@ fn read_ranges(
     method: &'static str,
     mouse_hint: Option<MouseSelectionHint>,
     capture_academic_context: bool,
+    button_progress: Option<&mpsc::SyncSender<Result<SelectionCapture, SelectionFailure>>>,
 ) -> Result<SelectionCapture, PatternReadError> {
     let length = unsafe { ranges.Length() }
         .map_err(|error| PatternReadError::Windows("SELECTION_LENGTH", error))?;
@@ -570,6 +697,7 @@ fn read_ranges(
     let mut point_refined = false;
     let mut context_before = None;
     let mut context_after = None;
+    let mut geometry_range = None;
     for index in 0..length {
         let selected_range = unsafe { ranges.GetElement(index) }
             .map_err(|error| PatternReadError::Windows("SELECTION_RANGE", error))?;
@@ -584,6 +712,9 @@ fn read_ranges(
         } else {
             selected_range
         };
+        if button_progress.is_some() && length == 1 {
+            geometry_range = Some(range.clone());
+        }
         if capture_academic_context && length == 1 {
             (context_before, context_after) = read_adjacent_context(&range);
         }
@@ -609,12 +740,16 @@ fn read_ranges(
     if text.trim().is_empty() {
         return Err(PatternReadError::Empty);
     }
-    let union_rect = rectangles.into_iter().reduce(ScreenRect::union);
-    Ok(SelectionCapture {
+    let union_rect = rectangles.iter().copied().reduce(ScreenRect::union);
+    let mut capture = SelectionCapture {
+        #[cfg(debug_assertions)]
+        document_evidence: None,
         text,
         context_before,
         context_after,
         rect: union_rect.filter(|rect| rect.width() > 0 && rect.height() > 0),
+        line_rects: rectangles,
+        nearby_rects: None,
         method: if point_refined {
             match method {
                 "UIA:TextPattern2" => "UIA:TextPattern2:MousePoint",
@@ -628,7 +763,58 @@ fn read_ranges(
         } else {
             method
         },
-    })
+    };
+    if let Some(sender) = button_progress {
+        let basic = SelectionCapture {
+            #[cfg(debug_assertions)]
+            document_evidence: None,
+            text: capture.text.clone(),
+            context_before: capture.context_before.clone(),
+            context_after: capture.context_after.clone(),
+            rect: capture.rect,
+            line_rects: capture.line_rects.clone(),
+            nearby_rects: None,
+            method: capture.method,
+        };
+        let _ = sender.try_send(Ok(basic));
+        if let Some(range) = geometry_range {
+            capture.nearby_rects = read_nearby_geometry(pattern, &range, mouse_hint);
+        }
+    }
+    Ok(capture)
+}
+
+// Geometry only, on the existing timeout-isolated worker. Never change the
+// user's selection or add surrounding text to the translation request.
+fn read_nearby_geometry(
+    pattern: &IUIAutomationTextPattern,
+    selected: &IUIAutomationTextRange,
+    hint: Option<MouseSelectionHint>,
+) -> Option<Vec<ScreenRect>> {
+    unsafe {
+        let range = if let Some(hint) = hint {
+            pattern.RangeFromPoint(hint.focus).ok()?
+        } else {
+            let range = selected.Clone().ok()?;
+            range
+                .MoveEndpointByRange(
+                    TextPatternRangeEndpoint_Start,
+                    selected,
+                    TextPatternRangeEndpoint_End,
+                )
+                .ok()?;
+            range
+        };
+        range.ExpandToEnclosingUnit(TextUnit_Line).ok()?;
+        range
+            .MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Line, -1)
+            .ok()?;
+        range
+            .MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Line, 1)
+            .ok()?;
+        let rects = safe_array_rectangles(range.GetBoundingRectangles().ok()?).ok()?;
+        (!rects.is_empty()).then_some(rects)
+    }
 }
 
 /// Edge's PDF provider can occasionally report a selection whose final range
@@ -895,6 +1081,14 @@ unsafe fn safe_array_rectangles(
         let rects = values
             .chunks_exact(4)
             .filter_map(|value| {
+                // Reject nonsensical provider coordinates before converting
+                // to integer screen geometry or doing placement arithmetic.
+                if value
+                    .iter()
+                    .any(|v| !v.is_finite() || v.abs() > 10_000_000.0)
+                {
+                    return None;
+                }
                 let left = value[0].round() as i32;
                 let top = value[1].round() as i32;
                 let width = value[2].round() as i32;
@@ -917,6 +1111,38 @@ unsafe fn safe_array_rectangles(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn optional_geometry_timeout_or_disconnect_keeps_valid_selection() {
+        let basic = || SelectionCapture {
+            #[cfg(debug_assertions)]
+            document_evidence: None,
+            text: "selected text".to_owned(),
+            context_before: None,
+            context_after: None,
+            rect: Some(line_rect(100)),
+            line_rects: vec![line_rect(100)],
+            nearby_rects: None,
+            method: "UIA:TextPattern",
+        };
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let timed_out = receive_optional_geometry(&receiver, basic(), Duration::ZERO);
+        assert_eq!(timed_out.text, "selected text");
+        assert_eq!(timed_out.line_rects, vec![line_rect(100)]);
+        let mut enriched = basic();
+        enriched.nearby_rects = Some(vec![line_rect(124)]);
+        sender.send(Ok(enriched)).unwrap();
+        assert!(
+            receive_optional_geometry(&receiver, basic(), Duration::ZERO)
+                .nearby_rects
+                .is_some()
+        );
+        drop(sender);
+        assert_eq!(
+            receive_optional_geometry(&receiver, basic(), Duration::ZERO).text,
+            "selected text"
+        );
+    }
 
     #[test]
     fn candidate_priority_is_explicit_and_stable() {
@@ -954,10 +1180,14 @@ mod tests {
     #[test]
     fn text_without_geometry_is_a_valid_capture_shape() {
         let capture = SelectionCapture {
+            #[cfg(debug_assertions)]
+            document_evidence: None,
             text: "selected".to_owned(),
             context_before: None,
             context_after: None,
             rect: None,
+            line_rects: Vec::new(),
+            nearby_rects: None,
             method: "UIA:TextPattern",
         };
         assert!(!capture.text.is_empty());

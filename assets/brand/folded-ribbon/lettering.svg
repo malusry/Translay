@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="174" height="48" viewBox="64 14 174 48" role="img" aria-label="Translay">
+  <defs>
+    <linearGradient id="icon-body" x1="19" y1="8" x2="43" y2="57" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5D8A85" />
+      <stop offset="1" stop-color="#514A6D" />
+    </linearGradient>
+    <linearGradient id="word-body" x1="70" y1="26" x2="230" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5D8A85" />
+      <stop offset="0.52" stop-color="#62797B" />
+      <stop offset="1" stop-color="#514A6D" />
+    </linearGradient>
+    <path id="icon-mark" d="M13 10.6C10.1 10.6 8.5 12.4 8.8 15C9.1 17.5 11.2 18.7 13.8 18.2C17.7 17.7 21.2 17.7 24.6 18.1L25.1 48.1C25.4 53.5 28 56.3 32 56.3C36 56.3 38.6 53.5 38.9 48.1L39.4 18.1C42.8 17.7 46.3 17.7 50.2 18.2C52.8 18.7 54.9 17.5 55.2 15C55.5 12.4 53.9 10.6 51 10.6C44.6 10.3 38.2 10.8 32 10.9C25.8 10.8 19.4 10.3 13 10.6Z" />
+  <linearGradient id="ribbon" x1="5" y1="15" x2="58" y2="22" gradientUnits="userSpaceOnUse"><stop stop-color="#B4D8AD" /><stop offset=".32" stop-color="#72B9A8" /><stop offset=".65" stop-color="#419A9B" /><stop offset="1" stop-color="#6867A4" /></linearGradient>
+<linearGradient id="stem" x1="33" y1="21" x2="36" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#343E70" /><stop offset=".48" stop-color="#7771A4" /><stop offset="1" stop-color="#B59BC4" /></linearGradient>
+<linearGradient id="crease" x1="27" y1="23" x2="30" y2="48" gradientUnits="userSpaceOnUse"><stop stop-color="#C1DEBC" /><stop offset=".5" stop-color="#7AB8AE" /><stop offset="1" stop-color="#467F8C" /></linearGradient>
+<linearGradient id="lip" x1="41" y1="20" x2="60" y2="9" gradientUnits="userSpaceOnUse"><stop stop-color="#3E687F" /><stop offset="1" stop-color="#9892BE" /></linearGradient>
+</defs>
+
+  <g fill="none" stroke="url(#word-body)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M70 29V47M70 35C74 27 82 27 87 31" />
+    <path d="M108 31C104 27 95 28 92 36C89 44 95 49 101 45C105 42 108 37 108 31V47" />
+    <path d="M116 29V47M116 35C120 28 131 27 132 36V47" />
+    <path d="M158 31C153 27 142 28 141 34C140 40 156 36 157 42C158 49 147 49 141 45" />
+    <path d="M167 20V41C167 46 170 48 174 47" />
+    <path d="M198 31C194 27 185 28 182 36C179 44 185 49 191 45C195 42 198 37 198 31V47" />
+    <path d="M205 29L213 47M230 29L219 52C216 58 210 59 206 56" />
+  </g>
+</svg>

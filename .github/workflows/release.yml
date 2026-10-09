@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: translay-v0.4.0-release
+  group: translay-release
   cancel-in-progress: false
 
 jobs:
@@ -44,31 +44,31 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v0.4.0
-          releaseName: "Translay v0.4.0"
+          tagName: v0.5.0
+          releaseName: "Translay v0.5.0"
           releaseBody: |
-            Translay v0.4.0 Windows 正式版。
+            Translay v0.5.0 Windows 正式版。
 
             本次更新：
-            - 全新模型设置界面与 Translay 品牌字标
-            - 新增 DeepSeek、OpenAI、Anthropic、智谱 AI、月之暗面和 Gemini API 快速配置
-            - 新增 Ollama、LM Studio、Jan、llama.cpp 和 vLLM 本地服务快速配置与活动模型检测
-            - 分服务记忆模型名称，切换模型来源时保留各自配置
-            - 扩展多供应商模型思考控制，并为不兼容接口提供安全回退
-            - 新增 Anthropic Messages API 原生调用支持
-            - 左键托盘图标可快速切换口语/学术风格，并显示轻量反馈与当前模型提示
+            - 改进翻译浮层阅读、数学公式显示、详细解释、失败重试与连续选区请求隔离
+            - 日常模式支持简短语气附注；成功译文使用有容量和时限的内存缓存
+            - 新托盘菜单、单击切换划词图标、双击切换日常／学习模式及轻量反馈
+            - 每次重新启动默认开启划词图标；本次运行仍可关闭
+            - 统一配置和托盘字体，优化保存按钮、连接测试及完整失败原因显示
+            - 修复重复测试、编辑中旧结果、乱序返回及后端／提供商健康状态归属
+            - 改进配置窗口隐藏／重开及旧会话操作隔离
 
             主要功能：
             - 选中文字后显示轻量翻译按钮，点击即可翻译
             - 保留 Ctrl+Shift+T 全局快捷键翻译方式
             - 改进 UI Automation、剪贴板回退与翻译请求协调
-            - 使用全新的透明渐变 T 桌面图标与专用托盘图标
+            - 使用折叠丝带桌面图标与带开启／关闭状态的托盘图标
             - 支持本地 OpenAI-compatible 服务与远程 API
-            - 支持口语、学术风格和模型思考开关
+            - 支持日常、学习模式和模型思考开关
             - API Key 仅保存在 Windows 凭据管理器
 
             下载 `setup.exe` 完成当前用户安装。本版本尚未进行商业代码签名，
             Windows 可能显示来源未知提示，请只从本仓库下载。
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
           args: "--bundles nsis"

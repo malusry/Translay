@@ -29,6 +29,18 @@ export function RetryIcon() {
   );
 }
 
+export function ExplanationIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M3.5 6.5V5.2a1.7 1.7 0 0 1 1.7-1.7h1.3" />
+      <path d="M13.5 3.5h1.3a1.7 1.7 0 0 1 1.7 1.7v1.3" />
+      <path d="M16.5 13.5v1.3a1.7 1.7 0 0 1-1.7 1.7h-1.3" />
+      <path d="M6.5 16.5H5.2a1.7 1.7 0 0 1-1.7-1.7v-1.3" />
+      <path d="M6.5 7.5h7m-7 2.7h7m-7 2.7h4.5" />
+    </svg>
+  );
+}
+
 export function CloseIcon() {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true">

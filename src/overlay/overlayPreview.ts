@@ -3,7 +3,8 @@ import { waitingPayload } from "./overlayState";
 
 export function developmentPreview(): CapturePayload | null {
   if (!import.meta.env.DEV) return null;
-  const phase = new URLSearchParams(window.location.search).get("preview");
+  const parameters = new URLSearchParams(window.location.search);
+  const phase = parameters.get("preview");
   if (!phase) return null;
 
   const base: CapturePayload = {
@@ -11,7 +12,8 @@ export function developmentPreview(): CapturePayload | null {
     requestId: 42,
     applicationName: "Microsoft Edge",
     captureMethod: "UI Automation",
-    translationMode: "conversational",
+    translationMode:
+      parameters.get("mode") === "academic" ? "academic" : "conversational",
   };
   if (phase === "capturing") {
     return { ...base, phase: "capturing" };
@@ -36,6 +38,16 @@ export function developmentPreview(): CapturePayload | null {
       phase: "translated",
       success: true,
       text: "翻译应该像系统原本就具备的能力一样自然存在，不打断阅读，也不要求用户切换窗口。",
+      errorMessage: null,
+    };
+  }
+  if (phase === "math") {
+    return {
+      ...base,
+      translationMode: "academic",
+      phase: "translated",
+      success: true,
+      text: "质能关系可写为 $E=mc^2$，样本均值定义为：\n$$\\bar{x}=\\frac{1}{n}\\sum_{i=1}^{n}x_i$$\n当 $p \\le 0.05$ 时，仍需结合效应量判断结果。",
       errorMessage: null,
     };
   }

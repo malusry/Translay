@@ -5,6 +5,12 @@ src-tauri/target/
 src-tauri/target-*/
 .cargo-target-*/
 .translay-webviews/
+tests/artifacts/acceptance-webview/
+tests/artifacts/tray-menu-sandbox/
+tests/artifacts/tray-menu-manual-sandbox/
+tests/artifacts/*
+!tests/artifacts/.gitkeep
+docs/sandbox-owner-repair.json
 .env
 .env.*
 !.env.example

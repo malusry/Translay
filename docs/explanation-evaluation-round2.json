@@ -1,0 +1,267 @@
+{
+  "round": 2,
+  "model": "deepseek-v4-flash",
+  "reasoningEnabled": false,
+  "promptSha256": "289857f71ce3d21d00ff1ba9bcee90deb758374cfdbd33ad959f35e42ae69b48",
+  "scope": "Same 12 synthetic cases after prompt tuning; regression validation, not independent generalization or native end-to-end.",
+  "results": [
+    {
+      "id": 1,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "The estimate is approximate.",
+        "translation": "估计值是近似的。"
+      },
+      "inPromptExample": true,
+      "rawOutput": "{\"coreExplanation\":\"这个估计值并非精确值，应把它理解为一个近似结果。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这个估计值并非精确值，应把它理解为一个近似结果。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.69,
+      "review": {
+        "status": "pass",
+        "note": "简单解释，无冗余栏目。"
+      }
+    },
+    {
+      "id": 2,
+      "input": {
+        "inputKind": "termOrPhrase",
+        "sourceText": "power",
+        "translation": "统计功效",
+        "contextBefore": "The test detects a true effect with probability 0.8."
+      },
+      "inPromptExample": true,
+      "rawOutput": "{\"coreExplanation\":\"这里的 power 指统计检验检出真实效应的能力，即统计功效；上下文中的 0.8 表示在相应条件下这种检出概率为 80%。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这里的 power 指统计检验检出真实效应的能力，即统计功效；上下文中的 0.8 表示在相应条件下这种检出概率为 80%。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.52,
+      "review": {
+        "status": "pass",
+        "note": "使用熟悉语言解释统计功效并正确消歧。"
+      }
+    },
+    {
+      "id": 3,
+      "input": {
+        "inputKind": "termOrPhrase",
+        "sourceText": "selection bias",
+        "translation": "选择偏差",
+        "contextBefore": "Only volunteers were included."
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"选择偏差指样本的选取方式使样本不能代表目标总体的情况。在上下文中，只纳入志愿者意味着这类人可能在某些特征上与非志愿者不同，从而使基于该样本的结论出现系统性偏离。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "选择偏差指样本的选取方式使样本不能代表目标总体的情况。在上下文中，只纳入志愿者意味着这类人可能在某些特征上与非志愿者不同，从而使基于该样本的结论出现系统性偏离。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 1.46,
+      "review": {
+        "status": "pass",
+        "note": "用可能表述志愿者与总体的差异，未补写方向或大小。"
+      }
+    },
+    {
+      "id": 4,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "X is associated with Y, but causality has not been established.",
+        "translation": "X 与 Y 相关，但尚未确立因果关系。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这句话说明 X 与 Y 之间存在统计关联或伴随关系，但明确指出这种关联并不足以证明 X 导致 Y 的因果关系，因果性尚待验证。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这句话说明 X 与 Y 之间存在统计关联或伴随关系，但明确指出这种关联并不足以证明 X 导致 Y 的因果关系，因果性尚待验证。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.67,
+      "review": {
+        "status": "pass",
+        "note": "保持关联不等于因果。"
+      }
+    },
+    {
+      "id": 5,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "The method converges if the objective is convex.",
+        "translation": "如果目标函数是凸的，该方法就会收敛。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"该方法的收敛性以目标函数为凸函数为前提：只要目标函数是凸的，方法就会收敛；但该句没有说明目标函数非凸时方法是否仍可能收敛。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "该方法的收敛性以目标函数为凸函数为前提：只要目标函数是凸的，方法就会收敛；但该句没有说明目标函数非凸时方法是否仍可能收敛。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.8,
+      "review": {
+        "status": "pass",
+        "note": "明确非凸情形尚未说明，未将充分条件强化为必要条件。"
+      }
+    },
+    {
+      "id": 6,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "Not all participants improved.",
+        "translation": "并非所有参与者都有改善。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这句话的意思是，参与者中并不是每个人都出现了改善，至少存在一位参与者没有改善。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这句话的意思是，参与者中并不是每个人都出现了改善，至少存在一位参与者没有改善。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.78,
+      "review": {
+        "status": "pass",
+        "note": "只断言至少一人未改善。"
+      }
+    },
+    {
+      "id": 7,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "This reduces the variance.",
+        "translation": "这降低了方差。",
+        "contextBefore": "We average independent measurements."
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"平均独立测量会使结果更稳定，即减少估计的离散程度，从而使方差降低。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "平均独立测量会使结果更稳定，即减少估计的离散程度，从而使方差降低。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 1.08,
+      "review": {
+        "status": "pass",
+        "note": "直接使用上下文说明取平均，只描述稳定性而未承诺准确性。"
+      }
+    },
+    {
+      "id": 8,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "This supports the claim.",
+        "translation": "这支持了该主张。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这句话表示，所讨论的内容为该主张提供了支持性证据，使该主张更可信，但并不必然证明其成立。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这句话表示，所讨论的内容为该主张提供了支持性证据，使该主张更可信，但并不必然证明其成立。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.73,
+      "review": {
+        "status": "fail",
+        "note": "未提示 This 和 claim 的具体指代无法确定。"
+      }
+    },
+    {
+      "id": 9,
+      "input": {
+        "inputKind": "passage",
+        "sourceText": "The 95% confidence interval excludes zero.",
+        "translation": "95% 置信区间不包含零。"
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这个95%置信区间不包含零，意味着该区间两端都大于0或都小于0，因此根据置信区间与假设检验的关系，对应的双侧检验在5%显著性水平下会拒绝参数等于零的原假设。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这个95%置信区间不包含零，意味着该区间两端都大于0或都小于0，因此根据置信区间与假设检验的关系，对应的双侧检验在5%显著性水平下会拒绝参数等于零的原假设。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.84,
+      "review": {
+        "status": "pass",
+        "note": "说明区间不含零并限定为对应的双侧检验，未解释为参数概率。"
+      }
+    },
+    {
+      "id": 10,
+      "input": {
+        "inputKind": "mathematicalExpression",
+        "sourceText": "$y=ax+b$",
+        "translation": "$y=ax+b$",
+        "contextBefore": "a is the slope and b is the intercept."
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这个公式表示一种线性关系：y 由自变量 x 乘以斜率 a、再加上截距 b 得到，即 y 随 x 呈直线变化，a 决定直线的倾斜程度，b 决定直线在 y 轴上的位置。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这个公式表示一种线性关系：y 由自变量 x 乘以斜率 a、再加上截距 b 得到，即 y 随 x 呈直线变化，a 决定直线的倾斜程度，b 决定直线在 y 轴上的位置。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 1.05,
+      "review": {
+        "status": "pass",
+        "note": "线性关系、斜率和截距含义清楚。"
+      }
+    },
+    {
+      "id": 11,
+      "input": {
+        "inputKind": "mathematicalExpression",
+        "sourceText": "We divide the scores by $\\sqrt{d_k}$ before softmax.",
+        "translation": "我们先将分数除以 $\\sqrt{d_k}$，再进行 softmax。",
+        "contextBefore": "d_k is the key dimension."
+      },
+      "inPromptExample": false,
+      "rawOutput": "{\"coreExplanation\":\"这里描述的是对分数进行缩放的操作：在应用 softmax 之前，先把（点积等得到的）分数除以键的维度 $d_k$ 的平方根 $\\\\sqrt{d_k}$，目的是防止分数因维度增大而过大，从而避免 softmax 的梯度变得过小。\",\"keyConcepts\":[],\"caveat\":\"\"}",
+      "output": {
+        "coreExplanation": "这里描述的是对分数进行缩放的操作：在应用 softmax 之前，先把（点积等得到的）分数除以键的维度 $d_k$ 的平方根 $\\sqrt{d_k}$，目的是防止分数因维度增大而过大，从而避免 softmax 的梯度变得过小。",
+        "keyConcepts": [],
+        "caveat": ""
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 1.17,
+      "review": {
+        "status": "fail",
+        "note": "补写点积来源和具体目的，未标为一般知识或可能动机。"
+      }
+    },
+    {
+      "id": 12,
+      "input": {
+        "inputKind": "mathematicalExpression",
+        "sourceText": "√ab",
+        "translation": "$\\sqrt{ab}$"
+      },
+      "inPromptExample": true,
+      "rawOutput": "{\"coreExplanation\":\"这段表达式涉及平方根以及 a、b 两个符号，可能表示 a 与 b 乘积的平方根，也可能仅表示 a 的平方根后乘以 b。\",\"keyConcepts\":[],\"caveat\":\"仅凭提取文本无法确定 b 是否在根号内，译文给出的范围仍需对照原式确认。\"}",
+      "output": {
+        "coreExplanation": "这段表达式涉及平方根以及 a、b 两个符号，可能表示 a 与 b 乘积的平方根，也可能仅表示 a 的平方根后乘以 b。",
+        "keyConcepts": [],
+        "caveat": "仅凭提取文本无法确定 b 是否在根号内，译文给出的范围仍需对照原式确认。"
+      },
+      "schemaValid": true,
+      "elapsedSeconds": 0.74,
+      "review": {
+        "status": "needsPolish",
+        "note": "保留歧义，但正文列举范围后在提示中重复。"
+      }
+    }
+  ],
+  "selectedForCurrentPrompt": true
+}

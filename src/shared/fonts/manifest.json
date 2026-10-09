@@ -1,0 +1,36 @@
+{
+  "fontTools": "4.66.1",
+  "brotli": "1.2.0",
+  "files": [
+    {
+      "role": "interface",
+      "family": "TranslayInterface",
+      "upstreamName": "Noto Sans SC Thin",
+      "upstreamVersion": "Version 2.004-H2;hotconv 1.0.118;makeotfexe 2.5.65603",
+      "upstreamSHA256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da",
+      "glyphs": 305,
+      "bytes": 110688,
+      "sha256": "fb262474aa64ffa109af14ec829c985ece9fe42a9010b20dc11cd6044378738a"
+    },
+    {
+      "role": "display",
+      "family": "TranslayDisplay",
+      "upstreamName": "Smiley Sans Oblique",
+      "upstreamVersion": "Version 2.0.1",
+      "upstreamSHA256": "b447d7e781f08bc95c4c9f23ba71ed2b8ebb639aa7184485c71c4ca5afcd25c4",
+      "glyphs": 8,
+      "bytes": 4092,
+      "sha256": "055da6ced5fba9ec9423349ac6e6a88d1fbb74b707121837a31ab31bc8fab8c9"
+    },
+    {
+      "role": "reading",
+      "family": "TranslayReading",
+      "upstreamName": "LXGW WenKai Screen",
+      "upstreamVersion": "Version 1.522;March 19,2026",
+      "upstreamSHA256": "cd1a6fa39c4ea42fd8f4e289945789b0e510cf7016435640f8893cdad9b220f3",
+      "glyphs": 33,
+      "bytes": 11176,
+      "sha256": "363c7233d45e90c04b627c2969c0ed01c5323b4e2ca3d8af2036120e4dec9c95"
+    }
+  ]
+}

@@ -29,6 +29,10 @@ impl ShutdownCoordinator {
             return;
         }
 
+        app.state::<super::windows::SettingsWindow>().stop();
+        app.state::<super::tray_menu::TrayMenu>().stop();
+        super::tray::stop_clicks(app);
+
         self.captures.cancel_current();
         if let Err(error) = self.hotkeys.unregister(app) {
             warn!(
@@ -41,9 +45,23 @@ impl ShutdownCoordinator {
                 "global shortcut unregister failed during explicit exit"
             );
         }
-        for window in app.webview_windows().into_values() {
-            let _ = window.hide();
+        // Final hiding shares the presentation thread. An already-running
+        // presentation finishes before this callback, never after exit cleanup.
+        let handle = app.clone();
+        if let Err(error) = app.run_on_main_thread(move || {
+            for window in handle.webview_windows().into_values() {
+                if let Err(error) = window.hide() {
+                    warn!(%error, "window hide failed during exit");
+                }
+            }
+            handle.exit(0);
+        }) {
+            warn!(%error, "exit window cleanup dispatch failed");
+            app.exit(0);
         }
-        app.exit(0);
+    }
+
+    pub(super) fn is_exiting(&self) -> bool {
+        self.started.load(Ordering::Acquire)
     }
 }

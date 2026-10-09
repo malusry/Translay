@@ -29,6 +29,7 @@ button {
 }
 
 .settings-shell {
+  font-family: var(--font-interface);
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
   width: 100%;
@@ -76,6 +77,7 @@ button {
 }
 
 .settings-nav button {
+  font-family: var(--font-display);
   --nav-accent: var(--brand-dark);
   --nav-tint: rgba(101, 97, 129, 0.075);
 
@@ -88,7 +90,7 @@ button {
   color: #6c7079;
   background: transparent;
   font-size: 12px;
-  font-weight: 570;
+  font-weight: 400;
   transition:
     color 130ms ease,
     background 130ms ease,
@@ -114,7 +116,7 @@ button {
   color: var(--nav-accent);
   background: var(--nav-tint);
   box-shadow: inset 2px 0 0 var(--nav-accent);
-  font-weight: 660;
+  font-weight: 400;
 }
 
 .settings-content {
@@ -143,10 +145,11 @@ button {
 }
 
 .settings-header h1 {
+  font-family: var(--font-display);
   margin: 0 0 7px;
   color: #24272e;
   font-size: 20px;
-  font-weight: 690;
+  font-weight: 400;
   letter-spacing: -0.025em;
 }
 
@@ -162,6 +165,12 @@ button {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
+}
+
+.settings-heading.translation + p {
+  font-family: var(--font-reading);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .active-model-status {
@@ -310,37 +319,66 @@ button {
 }
 
 .style-options > button {
+  --mode-accent: #70777b;
+  --mode-accent-strong: #555d62;
+  --mode-border: rgba(112, 119, 123, 0.5);
+  --mode-border-hover: rgba(112, 119, 123, 0.35);
+  --mode-focus: rgba(112, 119, 123, 0.22);
+  --mode-duration: 300ms;
+  --mode-dot-duration: 180ms;
+  --mode-ease: cubic-bezier(0.2, 0.8, 0.25, 1);
+
+  position: relative;
   display: flex;
   min-height: 68px;
   align-items: flex-start;
   gap: 10px;
   padding: 13px 14px;
+  overflow: hidden;
   text-align: left;
   border: 1px solid rgba(202, 210, 207, 0.78);
   border-radius: 12px;
   color: var(--text-soft);
   background: rgba(251, 252, 251, 0.64);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  isolation: isolate;
   transition:
-    border-color 130ms ease,
-    color 130ms ease,
-    background 130ms ease,
-    box-shadow 130ms ease,
-    transform 130ms ease;
+    border-color var(--mode-dot-duration) var(--mode-ease),
+    color var(--mode-dot-duration) var(--mode-ease),
+    box-shadow var(--mode-duration) var(--mode-ease);
+}
+
+.style-options > .daily-mode {
+  --mode-accent: #5d8582;
+  --mode-accent-strong: #4d7471;
+  --mode-border: rgba(93, 133, 130, 0.56);
+  --mode-border-hover: rgba(93, 133, 130, 0.38);
+  --mode-focus: rgba(93, 138, 133, 0.24);
+}
+
+.style-options > .study-mode {
+  --mode-accent: #6f698f;
+  --mode-accent-strong: #5c577d;
+  --mode-border: rgba(101, 97, 137, 0.56);
+  --mode-border-hover: rgba(101, 97, 137, 0.38);
+  --mode-focus: rgba(101, 97, 137, 0.24);
 }
 
 .style-options > button:hover:not(:disabled) {
-  border-color: rgba(174, 188, 184, 0.82);
-  background: rgba(255, 255, 255, 0.82);
+  border-color: var(--mode-border-hover);
+  color: var(--mode-accent-strong);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.72),
     0 4px 11px rgba(64, 72, 78, 0.065);
-  transform: translateY(-1px);
 }
 
 .style-options > button:active:not(:disabled) {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.66);
-  transform: translateY(0) scale(0.995);
+}
+
+.style-options > button:focus-visible {
+  outline: 2px solid var(--mode-focus);
+  outline-offset: 2px;
 }
 
 .style-options > button:disabled,
@@ -350,52 +388,78 @@ button {
 }
 
 .style-options > button.active {
-  border-color: transparent;
-  color: var(--brand-dark);
-  background:
-    linear-gradient(
-        135deg,
-        rgba(93, 138, 133, 0.045),
-        rgba(81, 74, 109, 0.04)
-      )
-      padding-box,
-    linear-gradient(#fafbfa, #fafbfa) padding-box,
-    linear-gradient(
-        135deg,
-        rgba(93, 138, 133, 0.58),
-        rgba(81, 74, 109, 0.56)
-      )
-      border-box;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 3px 9px rgba(72, 83, 91, 0.055);
+  border-color: var(--mode-border);
+  color: var(--mode-accent-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mode-accent) 8%, transparent);
 }
 
-.style-options > button.active:hover:not(:disabled) {
-  background:
-    linear-gradient(
-        135deg,
-        rgba(93, 138, 133, 0.06),
-        rgba(81, 74, 109, 0.052)
-      )
-      padding-box,
-    linear-gradient(#fbfcfb, #fbfcfb) padding-box,
-    linear-gradient(
-        135deg,
-        rgba(93, 138, 133, 0.7),
-        rgba(81, 74, 109, 0.67)
-      )
-      border-box;
+.mode-choice-wash {
+  --mode-wash-size: 560px;
+  --mode-wash-x: 21px;
+  --mode-wash-y: 22px;
+
+  position: absolute;
+  width: var(--mode-wash-size);
+  height: var(--mode-wash-size);
+  left: calc(var(--mode-wash-x) - var(--mode-wash-size) / 2);
+  top: calc(var(--mode-wash-y) - var(--mode-wash-size) / 2);
+  border-radius: 50%;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--mode-accent) 17%, transparent),
+    color-mix(in srgb, var(--mode-accent) 11%, transparent)
+  );
+  -webkit-mask-image: radial-gradient(circle closest-side, #000 86%, transparent 100%);
+  mask-image: radial-gradient(circle closest-side, #000 86%, transparent 100%);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.025);
+  transform-origin: center;
+  transition:
+    transform var(--mode-duration) cubic-bezier(0.32, 0.25, 0.32, 1),
+    opacity var(--mode-duration) cubic-bezier(0.25, 0.45, 0.5, 1);
 }
 
-.style-options button > span:last-child {
+.style-options > button.active .mode-choice-wash {
+  opacity: 0.65;
+  transform: scale(1);
+}
+
+.mode-choice-copy {
+  position: relative;
+  z-index: 1;
   display: grid;
-  gap: 5px;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 5px 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.mode-choice-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 20px;
+}
+
+.mode-choice-copy > small {
+  grid-column: 2;
 }
 
 .style-options strong {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.daily-mode strong { font-family: var(--font-display); }
+.study-mode strong { font-family: var(--font-reading); }
+.style-options .study-mode small {
+  font-family: var(--font-reading);
   font-size: 12px;
-  font-weight: 670;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .style-options small {
@@ -405,23 +469,41 @@ button {
 }
 
 .choice-indicator {
-  box-sizing: border-box;
-  flex: 0 0 auto;
+  display: block;
+  flex: 0 0 14px;
   width: 14px;
   height: 14px;
-  margin-top: 2px;
-  border: 1.2px solid #afb6ba;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.86);
-  transition:
-    border-color 130ms ease,
-    box-shadow 130ms ease;
 }
 
-.style-options button.active .choice-indicator {
-  border: 4px solid var(--brand);
-  background: #fff;
-  box-shadow: 0 0 0 2px rgba(93, 138, 133, 0.075);
+.choice-ring {
+  stroke: #afb6ba;
+  stroke-width: 1;
+  fill: rgba(255, 255, 255, 0.86);
+  transition:
+    stroke var(--mode-dot-duration) var(--mode-ease),
+    fill var(--mode-dot-duration) var(--mode-ease);
+}
+
+.choice-dot {
+  fill: var(--mode-accent);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.4);
+  transform-box: view-box;
+  transform-origin: center;
+  transition:
+    opacity var(--mode-dot-duration) var(--mode-ease),
+    transform var(--mode-dot-duration) var(--mode-ease);
+}
+
+.style-options button.active .choice-ring {
+  stroke: var(--mode-accent);
+  fill: #fff;
+}
+
+.style-options button.active .choice-dot {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .reasoning-row {
@@ -894,7 +976,7 @@ button {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: 14px;
+  padding-top: 12px;
 }
 
 .provider-actions button {
@@ -920,13 +1002,16 @@ button {
 }
 
 .connection-feedback {
+  flex: 1 1 0;
   min-width: 0;
   max-width: 240px;
+  height: 16px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 560;
-  line-height: 1.35;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -944,21 +1029,47 @@ button {
 }
 
 .provider-test-button {
+  --test-sage: #507b78;
+  --test-purple: #70608d;
+  position: relative;
   display: grid;
   flex: 0 0 auto;
   width: 32px;
   padding: 0;
-  border: 1px solid rgba(91, 105, 119, 0.18);
+  border: 0;
   border-radius: 50% !important;
   place-items: center;
-  color: var(--brand-dark);
-  background: rgba(239, 242, 241, 0.78);
-  box-shadow:
-    0 1px 2px rgba(45, 50, 83, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  color: #536e76;
+  background: linear-gradient(115deg,
+    color-mix(in srgb, var(--test-sage) 5%, transparent),
+    color-mix(in srgb, var(--test-purple) 7%, transparent));
+  box-shadow: none;
 }
 
-.provider-test-button svg {
+.provider-test-button .connection-button-border {
+  position: absolute;
+  inset: 0;
+  width: 32px;
+  height: 32px;
+  overflow: visible;
+  opacity: 0.82;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.connection-border-sage {
+  stop-color: var(--test-sage);
+}
+
+.connection-border-blend {
+  stop-color: color-mix(in srgb, var(--test-sage) 46%, var(--test-purple));
+}
+
+.connection-border-purple {
+  stop-color: var(--test-purple);
+}
+
+.provider-test-button .connection-status-icon {
   width: 16px;
   height: 16px;
   fill: none;
@@ -969,12 +1080,15 @@ button {
 }
 
 .provider-test-button:hover:not(:disabled) {
-  border-color: rgba(93, 120, 120, 0.34);
-  color: var(--brand);
-  background: rgba(235, 240, 238, 0.94);
-  box-shadow:
-    0 3px 8px rgba(70, 78, 126, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  background-color: color-mix(in srgb, var(--test-purple) 4%, transparent);
+}
+
+.provider-test-button:hover:not(:disabled) .connection-button-border {
+  opacity: 1;
+}
+
+.provider-actions .provider-test-button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .provider-test-button:focus-visible {
@@ -984,22 +1098,23 @@ button {
 
 .provider-test-button.working,
 .provider-test-button.working:disabled {
-  border-color: rgba(93, 120, 120, 0.24);
-  color: var(--brand);
-  background: rgba(235, 240, 238, 0.84);
+  color: #536e76;
   opacity: 1;
 }
 
 .provider-test-button.success {
-  border-color: rgba(95, 143, 114, 0.24);
   color: var(--success-text);
-  background: rgba(95, 143, 114, 0.09);
+  background-color: rgba(95, 143, 114, 0.035);
 }
 
 .provider-test-button.error {
-  border-color: rgba(185, 105, 98, 0.22);
   color: var(--error-text);
-  background: rgba(185, 105, 98, 0.08);
+  background-color: rgba(185, 105, 98, 0.04);
+}
+
+.provider-test-button.success .connection-button-border,
+.provider-test-button.error .connection-button-border {
+  opacity: 0.92;
 }
 
 .connection-test-spinner {
@@ -1016,45 +1131,92 @@ button {
 }
 
 .provider-actions .provider-save-button {
+  --save-sage: #507b78;
+  --save-purple: #70608d;
+  --save-fill-sage: color-mix(in srgb, var(--save-sage) 65%, var(--save-purple));
+  --save-fill-purple: color-mix(in srgb, var(--save-purple) 88%, var(--save-sage));
+  --save-edge: 0.92;
   position: relative;
   display: inline-flex;
-  width: 78px;
-  min-width: 78px;
+  width: 74px;
+  min-width: 74px;
+  height: 28px;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  overflow: hidden;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  color: #717682;
-  background: transparent;
-  background-clip: padding-box;
-  box-shadow: inset 0 0 0 1px rgba(91, 105, 119, 0.17);
+  gap: 5px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  color: #464b55;
+  background:
+    radial-gradient(ellipse at 6% 8%, color-mix(in srgb, var(--save-fill-sage) 6%, transparent), transparent 90%),
+    radial-gradient(ellipse at 94% 92%, color-mix(in srgb, var(--save-fill-purple) 8%, transparent), transparent 90%),
+    linear-gradient(115deg, color-mix(in srgb, var(--save-fill-sage) 3.5%, transparent), color-mix(in srgb, var(--save-fill-purple) 5%, transparent));
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  opacity: 1;
   isolation: isolate;
+  transition: color 180ms ease, transform 100ms ease;
 }
 
-.provider-save-button::before {
+.save-button-border {
   position: absolute;
-  z-index: -1;
+  z-index: 1;
   inset: 0;
-  padding: 1px;
-  border-radius: inherit;
-  background: linear-gradient(140deg, #668a86, #5a5779);
+  width: 100%;
+  height: 100%;
+  opacity: var(--save-edge);
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.save-border-sage {
+  stop-color: var(--save-sage);
+}
+
+.save-border-blend {
+  stop-color: color-mix(in srgb, var(--save-sage) 35%, var(--save-purple));
+}
+
+.save-border-purple {
+  stop-color: var(--save-purple);
+}
+
+.provider-actions .provider-save-button:disabled {
+  opacity: 1;
+}
+
+.provider-save-button::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: 7px;
+  background:
+    radial-gradient(ellipse at 6% 8%, color-mix(in srgb, var(--save-fill-sage) 7%, transparent), transparent 90%),
+    radial-gradient(ellipse at 94% 92%, color-mix(in srgb, var(--save-fill-purple) 7%, transparent), transparent 90%);
   content: "";
   opacity: 0;
   pointer-events: none;
-  transition: opacity 130ms ease;
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+  transition: opacity 180ms ease;
 }
 
-.provider-save-button svg {
-  width: 13px;
-  height: 13px;
+.provider-save-button > .save-status-icon,
+.provider-save-button > .save-button-label {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+}
+
+.save-button-label {
+  white-space: nowrap;
+}
+
+.provider-save-button .save-status-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--save-sage);
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -1062,37 +1224,24 @@ button {
   stroke-width: 1.6;
 }
 
-.provider-save-button.dirty {
-  border-color: transparent;
-  color: #5b5878;
-  background: transparent;
-  background-clip: padding-box;
-  box-shadow: 0 2px 7px rgba(72, 83, 91, 0.055);
+.provider-save-button.idle {
+  color: var(--muted);
 }
 
-.provider-save-button.dirty::before,
-.provider-save-button.saving::before {
-  opacity: 0.78;
+.provider-save-button.idle .save-button-border {
+  opacity: calc(var(--save-edge) * 0.74);
 }
 
-.provider-save-button.dirty:hover:not(:disabled) {
-  border-color: transparent;
-  color: #555270;
-  background: linear-gradient(
-    140deg,
-    rgba(102, 138, 134, 0.06),
-    rgba(90, 87, 121, 0.055)
-  );
-  background-clip: padding-box;
-  box-shadow: 0 3px 9px rgba(68, 79, 88, 0.075);
+.provider-save-button:hover:not(:disabled) .save-button-border {
+  opacity: min(1, calc(var(--save-edge) + 0.06));
 }
 
-.provider-save-button.dirty:hover:not(:disabled)::before {
-  opacity: 0.94;
+.provider-save-button:hover:not(:disabled)::after {
+  opacity: 1;
 }
 
 .provider-actions .provider-save-button:active:not(:disabled) {
-  transform: translateY(1px) scale(0.99);
+  transform: translateY(1px);
 }
 
 .provider-save-button:focus-visible {
@@ -1100,24 +1249,22 @@ button {
   outline-offset: 2px;
 }
 
-.provider-save-button.saving,
-.provider-save-button.saving:disabled {
-  border-color: transparent;
-  color: #595674;
-  background: transparent;
-  background-clip: padding-box;
-  box-shadow: 0 2px 7px rgba(72, 83, 148, 0.055);
-  opacity: 1;
+.provider-actions .provider-save-button.confirmed {
+  color: #536e76;
 }
 
-.provider-save-button.confirmed,
-.provider-save-button.confirmed:disabled {
-  border-color: rgba(95, 143, 114, 0.34);
-  color: var(--success-text);
-  background: transparent;
-  background-clip: padding-box;
-  box-shadow: 0 2px 7px rgba(73, 112, 88, 0.045);
-  opacity: 1;
+.provider-save-button.confirmed .save-button-border {
+  opacity: calc(var(--save-edge) * 0.86);
+}
+
+.provider-save-button.confirmed .save-status-icon {
+  color: inherit;
+}
+
+.provider-save-button.confirmed .save-button-label {
+  font-family: var(--font-reading);
+  font-weight: 400;
+  letter-spacing: 0.03em;
 }
 
 .save-button-spinner {
@@ -1130,6 +1277,18 @@ button {
   .connection-test-spinner,
   .save-button-spinner {
     animation: none;
+  }
+
+  .style-options > button,
+  .choice-ring,
+  .choice-dot,
+  .mode-choice-wash,
+  .provider-actions .provider-save-button,
+  .provider-actions .provider-test-button,
+  .provider-test-button .connection-button-border,
+  .save-button-border,
+  .provider-save-button::after {
+    transition: none;
   }
 }
 

@@ -1,4 +1,4 @@
-import type { FormEvent, MouseEvent } from "react";
+import { useLayoutEffect, useRef, type FormEvent, type MouseEvent } from "react";
 
 import type {
   ModelBackend,
@@ -14,7 +14,7 @@ import {
   apiProviderPresets,
   localProviderPresets,
 } from "./settingsState";
-import translayWordmark from "../../assets/icon-concepts/translay-desktop-v3/translay-wordmark-flowline.svg";
+import translayWordmark from "../../assets/brand/folded-ribbon/wordmark.svg?no-inline";
 
 export type SettingsSection = "translation" | "model";
 
@@ -64,9 +64,40 @@ interface SettingsViewProps {
   onClearApiKey: () => void;
 }
 
+function SaveButtonBorder() {
+  return (
+    <svg
+      className="save-button-border"
+      viewBox="0 0 74 28"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <linearGradient id="settings-save-border-gradient" x1="0" y1="0" x2="1" y2="1">
+          <stop className="save-border-sage" offset="0" />
+          <stop className="save-border-blend" offset="0.42" />
+          <stop className="save-border-purple" offset="0.76" />
+          <stop className="save-border-purple" offset="1" />
+        </linearGradient>
+      </defs>
+      <rect
+        x="0.5"
+        y="0.5"
+        width="73"
+        height="27"
+        rx="6.5"
+        fill="none"
+        stroke="url(#settings-save-border-gradient)"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+}
+
 function SaveStatusIcon({ saving }: { saving: boolean }) {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden="true">
+    <svg className="save-status-icon" viewBox="0 0 20 20" aria-hidden="true">
       {saving ? (
         <circle className="save-button-spinner" cx="10" cy="10" r="5.6" />
       ) : (
@@ -76,9 +107,25 @@ function SaveStatusIcon({ saving }: { saving: boolean }) {
   );
 }
 
+function ConnectionButtonBorder() {
+  return (
+    <svg className="connection-button-border" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="settings-connection-border-gradient" x1="0" y1="0" x2="1" y2="1">
+          <stop className="connection-border-sage" offset="0" />
+          <stop className="connection-border-blend" offset="0.42" />
+          <stop className="connection-border-purple" offset="0.76" />
+          <stop className="connection-border-purple" offset="1" />
+        </linearGradient>
+      </defs>
+      <circle cx="16" cy="16" r="15.5" fill="none" stroke="url(#settings-connection-border-gradient)" strokeWidth="1" />
+    </svg>
+  );
+}
+
 function ConnectionIcon({ health }: { health: ConnectionHealth }) {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden="true">
+    <svg className="connection-status-icon" viewBox="0 0 20 20" aria-hidden="true">
       {health === "working" ? (
         <circle className="connection-test-spinner" cx="10" cy="10" r="5.6" />
       ) : health === "success" ? (
@@ -100,6 +147,82 @@ function ConnectionIcon({ health }: { health: ConnectionHealth }) {
         </>
       )}
     </svg>
+  );
+}
+
+function ModeChoice({
+  mode,
+  label,
+  description,
+  active,
+  disabled,
+  onSelect,
+}: {
+  mode: TranslationMode;
+  label: string;
+  description: string;
+  active: boolean;
+  disabled: boolean;
+  onSelect: (mode: TranslationMode) => void;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useLayoutEffect(() => {
+    const button = buttonRef.current;
+    if (!button) return;
+    const marker = button.querySelector<SVGSVGElement>(".choice-indicator")!;
+    const wash = button.querySelector<HTMLElement>(".mode-choice-wash")!;
+    const measure = () => {
+      const card = button.getBoundingClientRect();
+      const circle = marker.getBoundingClientRect();
+      const style = getComputedStyle(button);
+      const borderLeft = parseFloat(style.borderLeftWidth);
+      const borderTop = parseFloat(style.borderTopWidth);
+      const width = card.width - borderLeft - parseFloat(style.borderRightWidth);
+      const height = card.height - borderTop - parseFloat(style.borderBottomWidth);
+      const x = circle.left + circle.width / 2 - card.left - borderLeft;
+      const y = circle.top + circle.height / 2 - card.top - borderTop;
+      const distance = Math.hypot(Math.max(x, width - x), Math.max(y, height - y));
+      wash.style.setProperty("--mode-wash-x", `${x}px`);
+      wash.style.setProperty("--mode-wash-y", `${y}px`);
+      // The feathered edge ends at 86%; keep the rounded card fully covered.
+      wash.style.setProperty(
+        "--mode-wash-size",
+        `${Math.ceil((distance + 4) / 0.86) * 2}px`,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(button);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      className={`${mode === "conversational" ? "daily-mode" : "study-mode"} ${active ? "active" : ""}`}
+      onClick={() => onSelect(mode)}
+      disabled={disabled}
+      aria-pressed={active}
+    >
+      <span className="mode-choice-wash" aria-hidden="true" />
+      <span className="mode-choice-copy">
+        <span className="mode-choice-heading">
+          <svg
+            className="choice-indicator"
+            viewBox="0 0 14 14"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle className="choice-ring" cx="7" cy="7" r="6.5" />
+            <circle className="choice-dot" cx="7" cy="7" r="3" />
+          </svg>
+          <strong>{label}</strong>
+        </span>
+        <small>{description}</small>
+      </span>
+    </button>
   );
 }
 
@@ -190,7 +313,7 @@ export function SettingsView({
               {section === "translation" ? "翻译" : "模型"}
             </h1>
             {section === "translation" ? (
-              <p data-tauri-drag-region>控制译文表达与模型推理</p>
+              <p data-tauri-drag-region>选择使用场景与模型思考方式</p>
             ) : (
               <p
                 className={`active-model-status ${activeHealth}`}
@@ -227,51 +350,41 @@ export function SettingsView({
         <form className="settings-form" onSubmit={onSubmit}>
           <div className="settings-body">
             {section === "translation" ? (
-              <div className="panel" aria-labelledby="translation-style-label">
+              <div className="panel" aria-labelledby="translation-mode-label">
                 <div className="panel-heading">
                   <div>
-                    <h2 id="translation-style-label">翻译风格</h2>
-                    <p>选择更适合当前阅读场景的表达方式</p>
+                    <h2 id="translation-mode-label">使用模式</h2>
+                    <p>选择适合当前内容的翻译方式</p>
                   </div>
                 </div>
 
                 <div
                   className="style-options"
-                  aria-label="翻译风格"
+                  aria-label="使用模式"
                   aria-busy={translationSaving}
                 >
-                  <button
-                    type="button"
-                    className={
-                      config.mode === "conversational" ? "active" : ""
-                    }
-                    onClick={() => onSelectMode("conversational")}
+                  <ModeChoice
+                    mode="conversational"
+                    label="日常"
+                    description="网页、消息与常用词句的快速翻译"
+                    active={config.mode === "conversational"}
                     disabled={!loaded || translationSaving}
-                  >
-                    <span className="choice-indicator" aria-hidden="true" />
-                    <span>
-                      <strong>口语</strong>
-                      <small>自然流畅，保留原文语气</small>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className={config.mode === "academic" ? "active" : ""}
-                    onClick={() => onSelectMode("academic")}
+                    onSelect={onSelectMode}
+                  />
+                  <ModeChoice
+                    mode="academic"
+                    label="学习"
+                    description="结合上下文理解论文、教材与专业内容"
+                    active={config.mode === "academic"}
                     disabled={!loaded || translationSaving}
-                  >
-                    <span className="choice-indicator" aria-hidden="true" />
-                    <span>
-                      <strong>学术</strong>
-                      <small>逻辑严谨，保持术语一致</small>
-                    </span>
-                  </button>
+                    onSelect={onSelectMode}
+                  />
                 </div>
 
                 <div className="setting-line reasoning-row">
                   <div>
-                    <strong>模型思考</strong>
-                    <small>{reasoningDescription}</small>
+                    <strong>翻译思考</strong>
+                    <small>{reasoningDescription}；详细解释会单独优先使用思考模式。</small>
                   </div>
                   <button
                     className={`switch-button ${
@@ -280,7 +393,7 @@ export function SettingsView({
                     type="button"
                     role="switch"
                     aria-checked={config.reasoningEnabled}
-                    aria-label="模型思考"
+                    aria-label="翻译思考"
                     disabled={!loaded || translationSaving}
                     onClick={onToggleReasoning}
                   >
@@ -497,19 +610,22 @@ export function SettingsView({
                 </div>
 
                 <div className="provider-actions">
-                  {connectionStatus.kind !== "idle" && (
-                    <span
-                      className={`connection-feedback ${connectionStatus.kind}`}
-                      role="status"
-                      title={connectionStatus.message}
-                    >
-                      {connectionStatus.message}
-                    </span>
-                  )}
+                  <span
+                    id="connection-feedback"
+                    className={`connection-feedback ${connectionStatus.kind}`}
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    title={connectionStatus.message}
+                  >
+                    {connectionStatus.message}
+                  </span>
                   <button
                     className={`provider-test-button ${connectionStatus.kind}`}
                     type="button"
                     onClick={onTestConnection}
+                    aria-busy={connectionStatus.kind === "working"}
+                    aria-describedby={connectionStatus.message ? "connection-feedback" : undefined}
                     disabled={
                       !loaded ||
                       connectionStatus.kind === "working" ||
@@ -532,6 +648,7 @@ export function SettingsView({
                           : "重新测试连接"
                     }
                   >
+                    <ConnectionButtonBorder />
                     <ConnectionIcon health={connectionStatus.kind} />
                   </button>
                   <button
@@ -545,6 +662,7 @@ export function SettingsView({
                             : "idle"
                     }`}
                     type="submit"
+                    aria-busy={modelSaving}
                     disabled={
                       !loaded ||
                       !providerDirty ||
@@ -560,10 +678,11 @@ export function SettingsView({
                           : "保存当前配置"
                     }
                   >
+                    <SaveButtonBorder />
                     {(modelSaving || saveConfirmed) && (
                       <SaveStatusIcon saving={modelSaving} />
                     )}
-                    <span>
+                    <span className="save-button-label">
                       {modelSaving ? "保存中" : saveConfirmed ? "已保存" : "保存"}
                     </span>
                   </button>

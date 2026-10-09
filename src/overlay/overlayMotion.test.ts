@@ -10,9 +10,16 @@ import {
   MATERIALIZE_MIN_DURATION_MS,
   MATERIALIZE_SAFETY_PADDING_MS,
   readWindowGeometry,
+  shouldAnimateLoadingResult,
 } from "./overlayMotion";
 
 describe("overlay materialize geometry", () => {
+  test("fast results do not replay an unseen loading shell", () => {
+    expect(shouldAnimateLoadingResult(0)).toBe(false);
+    expect(shouldAnimateLoadingResult(109)).toBe(false);
+    expect(shouldAnimateLoadingResult(110)).toBe(true);
+    expect(shouldAnimateLoadingResult(8000)).toBe(true);
+  });
   test("preserves a loading surface anchored at the target top-left", () => {
     const origin = calculateRevealOrigin(
       { x: 320, y: 180, width: 148, height: 58 },

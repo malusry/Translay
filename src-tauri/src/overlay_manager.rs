@@ -26,15 +26,16 @@ use windows::Win32::{
 
 use crate::{
     config::{
-        OVERLAY_DELIVERY_TIMEOUT, OVERLAY_DISMISS_COMPLETION_TIMEOUT, OVERLAY_GAP,
-        OVERLAY_MIN_WIDTH,
+        OVERLAY_DELIVERY_TIMEOUT, OVERLAY_DISMISS_COMPLETION_TIMEOUT, OVERLAY_EXPANDED_MAX_HEIGHT,
+        OVERLAY_GAP, OVERLAY_MIN_WIDTH,
     },
+    explanation::ExplanationRequest,
     foreground_context::ForegroundContext,
     latest_capture_store::{AckStatus, LatestCaptureStore},
     models::{CapturePayload, ScreenRect},
     overlay_policy::{
         DismissalClock, DismissalHandshakeState, auto_hide_delay, calculate_overlay_position,
-        dismissal_handshake_state, overlay_logical_size, scale_for_dpi,
+        clamp_overlay_position, dismissal_handshake_state, overlay_logical_size, scale_for_dpi,
     },
 };
 
@@ -99,6 +100,27 @@ impl OverlayManager {
         original: &ForegroundContext,
         anchor: ScreenRect,
     ) -> Result<bool, String> {
+        self.show_internal(app, payload, original, anchor, false)
+    }
+
+    pub fn show_retry(
+        &self,
+        app: &AppHandle,
+        payload: &CapturePayload,
+        original: &ForegroundContext,
+        anchor: ScreenRect,
+    ) -> Result<bool, String> {
+        self.show_internal(app, payload, original, anchor, true)
+    }
+
+    fn show_internal(
+        &self,
+        app: &AppHandle,
+        payload: &CapturePayload,
+        original: &ForegroundContext,
+        anchor: ScreenRect,
+        preserve_bounds: bool,
+    ) -> Result<bool, String> {
         let _lifecycle = self
             .lifecycle
             .lock()
@@ -128,7 +150,11 @@ impl OverlayManager {
         // SAFETY: all coordinates are physical screen pixels. SWP_NOACTIVATE and
         // WS_EX_NOACTIVATE prevent focus transfer; HWND_TOPMOST keeps the tool
         // window above ordinary application windows.
-        apply_overlay_layout(hwnd, payload, layout)?;
+        // A retry already has a visible failure surface. Keep its bounds until
+        // the result arrives instead of shrinking to the initial loading chip.
+        if !preserve_bounds || !unsafe { IsWindowVisible(hwnd).as_bool() } {
+            apply_overlay_layout(hwnd, payload, layout)?;
+        }
         if !wait_for_visibility(hwnd, true, Duration::from_millis(120)) {
             self.latest_capture.clear_if_request(payload.request_id);
             return Err("浮层未在预期时间内进入可见状态".to_owned());
@@ -178,7 +204,12 @@ impl OverlayManager {
         }
     }
 
-    pub fn update(&self, app: &AppHandle, payload: &CapturePayload) -> Result<(), String> {
+    pub fn update(
+        &self,
+        app: &AppHandle,
+        payload: &CapturePayload,
+        explanation_request: Option<ExplanationRequest>,
+    ) -> Result<(), String> {
         let _lifecycle = self
             .lifecycle
             .lock()
@@ -192,6 +223,13 @@ impl OverlayManager {
             || !self.latest_capture.mark_shown(payload.request_id)
         {
             return Err("翻译结果已被更新请求取代".to_owned());
+        }
+        if let Some(explanation_request) = explanation_request
+            && !self
+                .latest_capture
+                .store_explanation_request(explanation_request)
+        {
+            return Err("解释上下文已被更新请求取代".to_owned());
         }
         let window = app
             .get_webview_window("overlay")
@@ -239,7 +277,13 @@ impl OverlayManager {
         true
     }
 
-    pub fn fit_height(&self, app: &AppHandle, request_id: u64, logical_height: i32) -> bool {
+    pub fn fit_height(
+        &self,
+        app: &AppHandle,
+        request_id: u64,
+        logical_height: i32,
+        preserve_position: bool,
+    ) -> bool {
         let _lifecycle = self
             .lifecycle
             .lock()
@@ -264,11 +308,17 @@ impl OverlayManager {
         let Ok(hwnd) = overlay_hwnd(app) else {
             return false;
         };
+        let work_height_logical =
+            ((layout.work_area.height() as i64 * 96) / layout.dpi.max(1) as i64) as i32;
+        let maximum_height = (work_height_logical - 16)
+            .max(60)
+            .min(OVERLAY_EXPANDED_MAX_HEIGHT);
         apply_overlay_layout_with_height(
             hwnd,
             &payload,
             layout,
-            Some(logical_height.clamp(60, 320)),
+            Some(logical_height.clamp(60, maximum_height)),
+            preserve_position,
         )
         .is_ok()
     }
@@ -446,7 +496,7 @@ fn apply_overlay_layout(
     payload: &CapturePayload,
     layout: OverlayLayoutContext,
 ) -> Result<(), String> {
-    apply_overlay_layout_with_height(hwnd, payload, layout, None)
+    apply_overlay_layout_with_height(hwnd, payload, layout, None, false)
 }
 
 fn apply_overlay_layout_with_height(
@@ -454,15 +504,36 @@ fn apply_overlay_layout_with_height(
     payload: &CapturePayload,
     layout: OverlayLayoutContext,
     height_override: Option<i32>,
+    preserve_position: bool,
 ) -> Result<(), String> {
     let work_width_logical =
         ((layout.work_area.width() as i64 * 96) / layout.dpi.max(1) as i64) as i32;
     let maximum_width = (work_width_logical - 16).max(OVERLAY_MIN_WIDTH);
     let logical_size = overlay_logical_size(payload, maximum_width);
-    let width = scale_for_dpi(logical_size.width, layout.dpi);
-    let height = scale_for_dpi(height_override.unwrap_or(logical_size.height), layout.dpi);
+    let width = scale_for_dpi(logical_size.width, layout.dpi).min(layout.work_area.width().max(1));
+    let height = scale_for_dpi(height_override.unwrap_or(logical_size.height), layout.dpi)
+        .min(layout.work_area.height().max(1));
     let gap = scale_for_dpi(OVERLAY_GAP, layout.dpi);
-    let position = calculate_overlay_position(layout.anchor, layout.work_area, width, height, gap);
+    let anchored_position =
+        calculate_overlay_position(layout.anchor, layout.work_area, width, height, gap);
+    let position = if preserve_position {
+        let mut current_bounds = RECT::default();
+        // SAFETY: hwnd is the live overlay window and current_bounds is a valid
+        // output buffer for the duration of the call.
+        if unsafe { GetWindowRect(hwnd, &mut current_bounds) }.is_ok() {
+            clamp_overlay_position(
+                current_bounds.left,
+                current_bounds.top,
+                layout.work_area,
+                width,
+                height,
+            )
+        } else {
+            anchored_position
+        }
+    } else {
+        anchored_position
+    };
 
     // SAFETY: all coordinates are physical screen pixels and hwnd is the live
     // overlay window. The window remains non-activating while it is resized.
@@ -633,6 +704,7 @@ mod tests {
             warning_code: None,
             language_profile: Some(crate::translation::LanguageProfile::analyze(text)),
             translation_mode: Some(crate::translation::TranslationMode::Conversational),
+            tone_note: None,
         }
     }
 
