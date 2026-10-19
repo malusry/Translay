@@ -78,9 +78,11 @@ npm run macos:build -- --target x86_64-apple-darwin --bundles app --ci
 
 `.github/workflows/macos-spike.yml` 在 `codex/macos-*` 分支的相关代码 push、相关 PR 或手动触发时执行。Windows job 检查原型前端、状态逻辑与公共 Rust 编译，macOS job 分别运行共享库、原型库及临时 Keychain 数据操作测试，构建 Apple Silicon 和 Intel 包。Apple Silicon job 使用 `xcode-27` 的 macOS 27 预览环境，Intel 交叉构建使用 `macos-26`；实际系统版本由每次运行记录。
 
-在 GitHub 的 Actions → macOS Prototype → 对应运行 → Artifacts 下载 `Translay-Mac-Preview-<target>`。解开 GitHub 外层 ZIP 后，可看到包含 `.app` 的内层 ZIP、`SHA256SUMS.txt`、验证报告、诊断脚本及使用说明。内层归档使用 `ditto` 保存可执行权限，严格检查签名和解压往返一致性，并用被修改的临时副本验证检查会拒绝异常包。完整性检查失败时不上传 App，仅尽可能保留 `Translay-Mac-Verification-<target>` 诊断附件。
+在 GitHub 的 Actions → macOS Prototype → 对应运行 → Artifacts 下载 `Translay-Mac-Diagnostics-<target>`。解开 GitHub ZIP 后，可看到诊断脚本、脚本的 `SHA256SUMS.txt`、验证报告及使用说明。此附件不包含 App，不需要再次试装。
 
-`ci-policy-diagnostic.txt` 记录 CI 机器的系统策略结果；临时签名包可能被拒绝，报告完成不表示通过 Gatekeeper。CI 不启动测试 App，也不复现浏览器下载后的隔离状态。测试产物保留 14 天，不创建正式 Release。
+构建仍会用 `ditto` 制作 App 内层归档，检查可执行权限、严格签名和解压往返一致性，并用被修改的临时副本验证检查会拒绝异常包。只有完整性检查、`syspolicy_check distribution` 与 Gatekeeper 评估都通过时，才另行上传 `Translay-Mac-Preview-<target>` 应用附件。当前临时签名包尚未达到这一条件；失败或无法评估时只保留诊断，不将未知结果视为放行。
+
+`ci-policy-diagnostic.txt` 记录 CI 机器的系统策略结果，报告完成不表示通过 Gatekeeper。CI 不启动测试 App，也不复现浏览器下载后的隔离状态。诊断附件保留 14 天，不创建正式 Release。
 
 CI 的编译结果与真实交互验收分别记录。以下清单需要可交互的 Mac 环境执行。
 

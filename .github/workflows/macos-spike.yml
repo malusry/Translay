@@ -61,6 +61,9 @@ jobs:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -120,38 +123,55 @@ jobs:
             "$RUNNER_TEMP/translay-package/Translay-Mac-Preview-$SPIKE_TARGET.zip" \
             "$SPIKE_TARGET"
       - name: Record policy assessment without launching app
+        id: policy
         run: |
-          bash experiments/macos-spike/tools/diagnose-macos.sh \
+          if bash experiments/macos-spike/tools/diagnose-macos.sh --require-policy-acceptance \
             "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
-            > "$RUNNER_TEMP/translay-package/ci-policy-diagnostic.txt" 2>&1
+            > "$RUNNER_TEMP/translay-package/ci-policy-diagnostic.txt" 2>&1; then
+            echo "distribution_ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "distribution_ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::App archive withheld: system policy assessment did not accept this bundle. Only diagnostics will be uploaded."
+          fi
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
           ### macOS prototype verification
           Signature integrity and archive checks are separate from system policy acceptance.
           This prototype is ad-hoc signed and **not notarized**. The policy report records
           rejections as evidence; it does not override them or certify the app as safe.
           CI does not reproduce a browser download or an interactive first launch.
+          App archives are withheld unless signature integrity and both policy assessments pass.
           Do not bypass a warning that the app contains malware or will damage your computer.
           SUMMARY
       - name: Include checksums and user diagnostic
+        if: always()
         run: |
-          cp experiments/macos-spike/tools/diagnose-macos.sh "$RUNNER_TEMP/translay-package/"
-          cp experiments/macos-spike/MACOS-TESTING.txt "$RUNNER_TEMP/translay-package/"
-          cd "$RUNNER_TEMP/translay-package"
-          shasum -a 256 "Translay-Mac-Preview-$SPIKE_TARGET.zip" diagnose-macos.sh > SHA256SUMS.txt
-      - name: Upload verified development archive
+          mkdir -p "$RUNNER_TEMP/translay-diagnostic"
+          cp experiments/macos-spike/tools/diagnose-macos.sh "$RUNNER_TEMP/translay-diagnostic/"
+          cp experiments/macos-spike/MACOS-TESTING.txt "$RUNNER_TEMP/translay-diagnostic/"
+          for report in package-verification.txt ci-policy-diagnostic.txt; do
+            if [ -f "$RUNNER_TEMP/translay-package/$report" ]; then
+              cp "$RUNNER_TEMP/translay-package/$report" "$RUNNER_TEMP/translay-diagnostic/"
+            fi
+          done
+          cd "$RUNNER_TEMP/translay-diagnostic"
+          shasum -a 256 diagnose-macos.sh > SHA256SUMS.txt
+          if [ -f "$RUNNER_TEMP/translay-package/Translay-Mac-Preview-$SPIKE_TARGET.zip" ]; then
+            cd "$RUNNER_TEMP/translay-package"
+            shasum -a 256 "Translay-Mac-Preview-$SPIKE_TARGET.zip" > SHA256SUMS.txt
+          fi
+      - name: Upload development app only after system policy acceptance
+        if: success() && steps.policy.outputs.distribution_ready == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: Translay-Mac-Preview-${{ matrix.target }}
           path: ${{ runner.temp }}/translay-package/
           if-no-files-found: error
           retention-days: 14
-      - name: Retain verification evidence even on failure
+      - name: Upload diagnostic tool and verification evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: Translay-Mac-Verification-${{ matrix.target }}
-          path: |
-            ${{ runner.temp }}/translay-package/package-verification.txt
-            ${{ runner.temp }}/translay-package/ci-policy-diagnostic.txt
+          name: Translay-Mac-Diagnostics-${{ matrix.target }}
+          path: ${{ runner.temp }}/translay-diagnostic/
           if-no-files-found: warn
           retention-days: 14

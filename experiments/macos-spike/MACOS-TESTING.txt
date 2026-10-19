@@ -1,6 +1,7 @@
 Translay Mac Preview：测试包与启动诊断
 
-本包仍使用临时（ad-hoc）签名，尚未经过 Apple 公证。
+这是诊断附件，不需要安装或启动 Translay，附件不包含 App。
+当前原型仍使用临时（ad-hoc）签名，尚未经过 Apple 公证。
 完整性检查通过不代表已获得系统放行，也不代表通过了恶意软件检查。
 若系统提示“将对电脑造成伤害”或“包含恶意软件”，暂停打开并先诊断。
 
@@ -28,8 +29,7 @@ Translay Mac Preview：测试包与启动诊断
 
 二、包内文件
 
-Translay-Mac-Preview-<架构>.zip：保留 App 可执行权限的内层归档。
-SHA256SUMS.txt：内层 ZIP 与诊断脚本的 SHA-256（不适用于 GitHub 下载的外层 ZIP）。
+SHA256SUMS.txt：诊断脚本的 SHA-256（不适用于 GitHub 下载的外层 ZIP）。
 package-verification.txt：CPU、签名完整性及 ZIP 解压一致性检查结果。
 ci-policy-diagnostic.txt：CI 机器上的系统策略检查结果，不代表你的 Mac 的检查结果。
 diagnose-macos.sh：上述诊断脚本。
@@ -37,6 +37,8 @@ diagnose-macos.sh：上述诊断脚本。
 Apple M 系列芯片使用 aarch64-apple-darwin；Intel 使用 x86_64-apple-darwin。
 Apple 芯片构建选择 macOS 27 的 Xcode 27 环境；具体版本以报告为准。
 CI 没有验证浏览器下载后的隔离状态，也没有模拟用户双击首次启动。
+系统策略评估未放行时，CI 只上传诊断附件，不提供 App 供再次试装。
+以后仅在策略评估通过时才会出现独立的 Translay-Mac-Preview-<架构> 应用附件。
 
 三、后续正式分发
 

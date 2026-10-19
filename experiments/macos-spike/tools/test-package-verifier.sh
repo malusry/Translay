@@ -49,5 +49,14 @@ bad_archive="$scratch/modified.zip"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$copy" "$bad_archive"
 expect_rejection 'signature integrity is invalid' "$app" "$bad_archive" "$target"
 
+# A missing app must still produce a useful report, but must never pass the
+# distribution gate. Neither path may try to launch the absent application.
+bash "$tools_dir/diagnose-macos.sh" "$scratch/missing.app" > "$scratch/missing-report.txt" 2>&1
+if bash "$tools_dir/diagnose-macos.sh" --require-policy-acceptance "$scratch/missing.app" > "$scratch/missing-gate.txt" 2>&1; then
+  printf 'FAIL: Missing app passed system policy acceptance.\n' >&2
+  exit 1
+fi
+/usr/bin/grep -F 'DISTRIBUTION BLOCKED' "$scratch/missing-gate.txt"
+
 printf 'PASS: valid package accepted; wrong CPU, missing executable permissions,\n'
-printf 'modified signature and modified archived bundle rejected.\n'
+printf 'modified signature and modified archived bundle rejected; missing app cannot pass policy.\n'

@@ -29,7 +29,7 @@ verify_bundle() {
     printf 'FAIL: Main executable is missing or has lost executable permissions.\n' >&2
     return 1
   fi
-  if ! /usr/bin/lipo -verify_arch "$architecture" "$binary"; then
+  if ! /usr/bin/lipo "$binary" -verify_arch "$architecture"; then
     printf 'FAIL: Bundle does not contain the requested CPU architecture.\n' >&2
     return 1
   fi

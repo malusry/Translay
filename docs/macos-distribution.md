@@ -21,11 +21,13 @@ Mac 原型与 Windows 正式版使用不同的应用入口、应用标识和构�
 
 Apple 芯片构建使用 GitHub 的 `xcode-27` 预览镜像，Intel 交叉构建使用 `macos-26`。每次记录真实系统版本，不能从标签名称推定某个补丁版本已经通过。预览镜像不可用时应保留失败状态，不静默回退并宣称已覆盖 macOS 27。
 
-`tools/verify-package.sh` 对原始及 ZIP 解压后的 App 分别检查应用标识、CPU 架构、主程序可执行权限和严格签名完整性，并比较打包前后的文件内容。失败时不上传供试用的 App 归档；检查日志仍尽可能保留。
+`tools/verify-package.sh` 对原始及 ZIP 解压后的 App 分别检查应用标识、CPU 架构、主程序可执行权限和严格签名完整性，并比较打包前后的文件内容。
+
+`diagnose-macos.sh --require-policy-acceptance` 在保留完整报告的同时，要求严格签名、分发前检查和 Gatekeeper 评估全部成功，否则以非零状态结束。CI 只在完整性检查及该策略门槛都通过时上传 App；失败、命令不可用或无法评估都只保留诊断附件，不发布供再次试装的 App。当前临时签名包尚未满足策略门槛。
 
 `tools/test-package-verifier.sh` 用实际构建包的临时副本验证拒绝错误 CPU、丢失执行权限、签名后修改文件，以及归档中被修改的 App。临时副本不会替代正常测试包。
 
-测试附件同时提供内层 ZIP 与诊断脚本的 SHA-256、完整性验证结果和 CI 策略报告。GitHub 外层 ZIP 有自己的摘要，不能与内层 ZIP 的值混用。
+`Translay-Mac-Diagnostics-<target>` 提供诊断脚本及其 SHA-256、完整性验证结果和 CI 策略报告，不包含 App。未来通过策略门槛后单独上传的应用附件包含内层 ZIP 与对应摘要。GitHub 外层 ZIP 有自己的摘要，不能与内层 ZIP 或脚本的值混用。
 
 以下结果必须分别记录：
 
