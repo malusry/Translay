@@ -11,6 +11,7 @@ on:
       - "package-lock.json"
       - "tsconfig.json"
       - "src/shared/**"
+      - "src/settings/**"
       - "assets/brand/folded-ribbon/**"
       - "src-tauri/icons/**"
   pull_request:
@@ -21,6 +22,7 @@ on:
       - "package-lock.json"
       - "tsconfig.json"
       - "src/shared/**"
+      - "src/settings/**"
       - "assets/brand/folded-ribbon/**"
       - "src-tauri/icons/**"
 

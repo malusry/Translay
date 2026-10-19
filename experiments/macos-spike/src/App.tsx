@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import wordmark from "../../../assets/brand/folded-ribbon/wordmark.svg?no-inline";
+import { SettingsView, type SettingsSection } from "../../../src/settings/SettingsView";
+import type { ModelBackend, ModelConfigView } from "../../../src/settings/modelSettings";
+import { apiKeyLabelForPreset, providerPresetForConfig, reasoningDescriptionForConfig } from "../../../src/settings/settingsState";
 import {
   acceptSnapshot,
   getAccessibility,
@@ -13,7 +15,12 @@ import {
   type Snapshot,
 } from "./ipc";
 
+const idle = { kind: "idle", message: "" } as const;
+const unavailable = () => {};
+
 export default function App() {
+  const [section, setSection] = useState<SettingsSection>("translation");
+  const [backend, setBackend] = useState<ModelBackend>("local");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [accessibility, setAccessibility] = useState<AccessibilityStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -94,52 +101,88 @@ export default function App() {
       ? "需要 Mac 验证"
       : accessibility.trusted ? "已授权" : "未授权";
 
+  // Display the real shared view without connecting prototype fields to model
+  // services or credentials. Backend tabs only select which form to preview.
+  const config: ModelConfigView = {
+    backend,
+    mode: snapshot?.mode ?? "conversational",
+    reasoningEnabled: false,
+    local: { baseUrl: "http://127.0.0.1:11434/v1", model: "" },
+    api: { baseUrl: "https://api.openai.com/v1", model: "" },
+    localModels: {},
+    apiModels: {},
+    timeoutSeconds: 60,
+    hasApiKey: false,
+    apiKeyHint: null,
+  };
+
   return (
-    <main className="spike-shell">
-      <aside className="spike-sidebar">
-        <img className="spike-wordmark" src={wordmark} alt="Translay" />
-        <nav aria-label="设置分类"><a href="#translation" aria-current="page">翻译</a></nav>
-        <span className="spike-build-label">Mac 开发预览</span>
-      </aside>
-      <section className="spike-content">
-        <header><h1>翻译</h1><p>使用场景与系统权限</p></header>
-        {!native && <p className="preview-note" role="note">浏览器布局预览 · 菜单栏和系统权限需在 Mac 中验证</p>}
-        {error && <p className="error-note" role="alert">{error}</p>}
-        {snapshot?.exiting && <p className="preview-note" role="status">正在退出…</p>}
-        <div className="spike-body" id="translation">
-          <section className="settings-card" aria-labelledby="mode-heading">
-            <div className="card-heading"><h2 id="mode-heading">翻译模式</h2><span>从右键菜单切换</span></div>
-            <div className="mode-grid">
-              <div className={`mode-tile ${snapshot?.mode === "conversational" ? "selected" : ""}`}>
-                <span className="mode-name">日常模式</span><span>自然、直接地理解文字</span>
-                {snapshot?.mode === "conversational" && <span className="mode-check" aria-label="当前模式">✓</span>}
-              </div>
-              <div className={`mode-tile academic ${snapshot?.mode === "academic" ? "selected" : ""}`}>
-                <span className="mode-name">学习模式</span><span>关注术语与原文表达</span>
-                {snapshot?.mode === "academic" && <span className="mode-check" aria-label="当前模式">✓</span>}
-              </div>
-            </div>
-            <div className="selection-status" aria-live="polite">
-              <span>划词图标</span>
-              <span className={`state-pill ${snapshot?.selectionIconEnabled ? "enabled" : ""}`}>
-                {!snapshot ? "读取中" : snapshot.selectionIconEnabled ? "已开启" : "已关闭"}
-              </span>
-            </div>
-            <p className="card-help">单击菜单栏图标切换开关，右键选择翻译模式。</p>
-          </section>
-          <section className="settings-card" aria-labelledby="permission-heading">
-            <div className="card-heading"><h2 id="permission-heading">辅助功能权限</h2><span className={accessibility?.trusted ? "trusted" : ""} aria-live="polite">{permissionLabel}</span></div>
-            <p className="permission-description">读取其他应用中的选中文字，需要你在系统设置中允许 Translay。</p>
-            <p className="card-help">系统设置 → 隐私与安全性 → 辅助功能。授权后返回此窗口重新检查。</p>
-            <div className="permission-actions">
-              <button type="button" className="primary-button" disabled={!native || busy || accessibility?.trusted === true} onClick={() => void authorize()}>{busy ? "正在请求…" : accessibility?.trusted ? "已获授权" : "请求授权"}</button>
-              <button type="button" disabled={!native} onClick={() => void openSettings()}>打开系统设置</button>
-              <button type="button" disabled={!native || busy} onClick={() => void refreshAccessibility()}>重新检查</button>
-            </div>
-          </section>
+    <SettingsView
+      windowChrome="native"
+      readOnly
+      section={section}
+      config={config}
+      activeHealth="idle"
+      activeSummary="配置样式预览 · 尚未连接模型"
+      reasoningDescription={reasoningDescriptionForConfig(config)}
+      loaded={snapshot !== null && !snapshot.exiting}
+      translationSaving={false}
+      modelSaving={false}
+      modelSwitching={false}
+      saveConfirmed={false}
+      providerDirty={false}
+      apiKeyLabel={apiKeyLabelForPreset(providerPresetForConfig(config))}
+      apiKey=""
+      editingApiKey={false}
+      connectionStatus={idle}
+      status={error ? { kind: "error", message: error } : idle}
+      modelSourceDescription="切换查看配置样式；模型连接与保存尚未接入"
+      notice={
+        <div className="mac-preview-notice" role="note">
+          <span>{native ? "Mac 开发预览" : "浏览器布局预览"}</span>
+          <span>配置项仅供预览，尚未接入模型与保存。</span>
+          {snapshot?.exiting && <span role="status">正在退出…</span>}
         </div>
-        <footer>此预览仅验证菜单栏、窗口和授权状态；划词开关暂不启动自动取词。</footer>
-      </section>
-    </main>
+      }
+      translationExtras={
+        <section className="panel mac-system-panel" aria-labelledby="permission-heading">
+          <div className="setting-line mac-selection-status" aria-live="polite">
+            <div><strong>划词图标</strong><small>单击菜单栏图标切换开关，右键切换日常／学习模式。</small></div>
+            <span className={`mac-state-pill ${snapshot?.selectionIconEnabled ? "enabled" : ""}`}>
+              {!snapshot ? "读取中" : snapshot.selectionIconEnabled ? "已开启" : "已关闭"}
+            </span>
+          </div>
+          <div className="panel-heading mac-permission-heading">
+            <div><h2 id="permission-heading">辅助功能权限</h2><p>用于读取其他应用中的选中文字</p></div>
+            <span className={`mac-permission-status ${accessibility?.trusted ? "trusted" : ""}`} aria-live="polite">{permissionLabel}</span>
+          </div>
+          <p className="mac-permission-help">在系统设置的「隐私与安全性 → 辅助功能」中允许 Translay，返回此窗口后重新检查。</p>
+          <div className="mac-permission-actions">
+            <button type="button" disabled={!native || busy || accessibility?.trusted === true} onClick={() => void authorize()}>{busy ? "正在请求…" : accessibility?.trusted ? "已获授权" : "请求授权"}</button>
+            <button type="button" disabled={!native} onClick={() => void openSettings()}>打开系统设置</button>
+            <button type="button" disabled={!native || busy} onClick={() => void refreshAccessibility()}>重新检查</button>
+          </div>
+          <p className="mac-scope-note">划词开关暂不启动自动取词。菜单栏、窗口与权限需在 Mac 中验证。</p>
+        </section>
+      }
+      onSelectSection={setSection}
+      onWindowMouseDown={unavailable}
+      onMinimize={unavailable}
+      onClose={unavailable}
+      onSubmit={(event) => event.preventDefault()}
+      onSelectMode={unavailable}
+      onToggleReasoning={unavailable}
+      onSelectBackend={setBackend}
+      onSelectProviderPreset={unavailable}
+      onOpenProviderPortal={unavailable}
+      onSetEndpoint={unavailable}
+      onRefreshApiKeyStatus={unavailable}
+      onBeginApiKeyEdit={unavailable}
+      onSetApiKey={unavailable}
+      onFinishApiKeyEdit={unavailable}
+      onSetTimeoutSeconds={unavailable}
+      onTestConnection={unavailable}
+      onClearApiKey={unavailable}
+    />
   );
 }

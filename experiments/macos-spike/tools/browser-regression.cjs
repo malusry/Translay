@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
+const { assertFont } = require("../../../tests/browser/font-evidence.cjs");
 
 (async () => {
   const { createServer } = await import("vite");
@@ -16,22 +17,56 @@ const { chromium } = require("playwright");
     browser = await chromium.launch({ channel: "msedge", headless: true });
     const artifacts = path.join(root, "tests/artifacts/macos-spike");
     fs.mkdirSync(artifacts, { recursive: true });
-    const page = await browser.newPage({ viewport: { width: 740, height: 570 } });
+    const page = await browser.newPage({ viewport: { width: 680, height: 640 } });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(server.resolvedUrls.local[0]);
     await page.getByText("需要 Mac 验证", { exact: true }).waitFor();
     assert(await page.getByRole("button", { name: "请求授权", exact: true }).isDisabled());
     assert(await page.getByRole("button", { name: "打开系统设置" }).isDisabled());
+    assert.equal(await page.locator(".window-controls").count(), 0);
+    assert.equal(await page.locator("[data-tauri-drag-region]").count(), 0);
+    assert(await page.locator(".daily-mode").isDisabled());
+    assert(await page.getByRole("switch", { name: "翻译思考" }).isDisabled());
+    const fonts = {};
+    for (const [selector, family] of [
+      [".settings-header h1", "TranslayDisplay"],
+      [".translation-nav", "TranslayDisplay"],
+      [".daily-mode strong", "TranslayDisplay"],
+      [".study-mode strong", "TranslayReading"],
+      [".daily-mode small", "TranslayInterface"],
+    ]) fonts[selector] = await assertFont(page, selector, family);
     await page.screenshot({ path: path.join(artifacts, "browser-preview.png") });
     await page.setViewportSize({ width: 640, height: 480 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    assert(await page.locator("footer").evaluate((footer) => footer.getBoundingClientRect().bottom <= innerHeight));
+    await page.getByRole("button", { name: "重新检查" }).scrollIntoViewIfNeeded();
+    assert(await page.getByRole("button", { name: "重新检查" }).isVisible());
+    assert(await page.locator(".settings-body").evaluate((body) => body.scrollTop > 0 && body.getBoundingClientRect().bottom <= innerHeight));
     await page.screenshot({ path: path.join(artifacts, "browser-preview-small.png") });
+    await page.setViewportSize({ width: 680, height: 640 });
+    await page.getByRole("button", { name: "模型", exact: true }).click();
+    assert(await page.locator("#base-url").isDisabled());
+    assert(await page.locator("#model-name").isDisabled());
+    assert(await page.getByRole("button", { name: "测试连接", exact: true }).isDisabled());
+    assert(await page.getByRole("button", { name: "保存当前配置", exact: true }).isDisabled());
+    assert.equal(await page.locator("#base-url").inputValue(), "http://127.0.0.1:11434/v1");
+    await page.screenshot({ path: path.join(artifacts, "model-local-preview.png") });
+    await page.getByRole("button", { name: "切换到在线 API", exact: true }).click();
+    assert(await page.locator("#api-key").isDisabled());
+    assert.equal(await page.locator("#api-key").inputValue(), "");
+    assert(await page.locator(".provider-preset").first().isDisabled());
+    await page.screenshot({ path: path.join(artifacts, "model-api-preview.png") });
+    await page.setViewportSize({ width: 640, height: 480 });
+    await page.locator(".provider-save-button").scrollIntoViewIfNeeded();
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    const fields = await page.locator(".form-row input").evaluateAll((inputs) => inputs.map((input) => ({ disabled: input.disabled, inside: input.getBoundingClientRect().right <= innerWidth })));
+    assert(fields.every((field) => field.disabled && field.inside));
+    await page.screenshot({ path: path.join(artifacts, "model-api-preview-small.png") });
+    fs.writeFileSync(path.join(artifacts, "shared-settings-fonts.json"), JSON.stringify(fonts, null, 2));
     await page.close();
 
     // This is a frontend IPC fixture. It does not exercise native Mac UI or grant permissions.
-    const nativePage = await browser.newPage({ viewport: { width: 740, height: 570 } });
+    const nativePage = await browser.newPage({ viewport: { width: 680, height: 640 } });
     nativePage.on("pageerror", (error) => errors.push(error.message));
     await nativePage.addInitScript(() => {
       window.isTauri = true;
@@ -81,8 +116,8 @@ const { chromium } = require("playwright");
       window.releaseInitialReads();
     });
     await nativePage.getByText("未授权", { exact: true }).waitFor();
-    assert.equal(await nativePage.locator(".mode-tile.selected .mode-name").innerText(), "学习模式");
-    assert.equal(await nativePage.locator(".state-pill").innerText(), "已关闭");
+    assert.equal(await nativePage.locator(".style-options > button.active strong").innerText(), "学习");
+    assert.equal(await nativePage.locator(".mac-state-pill").innerText(), "已关闭");
     await nativePage.getByRole("button", { name: "请求授权", exact: true }).click();
     await nativePage.getByRole("button", { name: "请求授权", exact: true }).waitFor();
     assert.equal(await nativePage.evaluate(() => window.authorizationRequests), 1);
@@ -94,7 +129,7 @@ const { chromium } = require("playwright");
     await nativePage.getByText("未授权", { exact: true }).waitFor();
     await nativePage.screenshot({ path: path.join(artifacts, "frontend-ipc-fixture.png") });
     assert.deepEqual(errors, []);
-    console.log("PASS: browser layout, unsupported preview permissions, stale snapshot delivery, asynchronous authorization and revocation. Native Mac controls and focus were not exercised.");
+    console.log("PASS: shared translation/local/API settings views and bundled fonts, read-only preview, small-window scrolling, native chrome separation, unsupported preview permissions, stale snapshots, asynchronous authorization and revocation. Native Mac controls and focus were not exercised.");
   } finally {
     if (browser) await browser.close();
     await server.close();

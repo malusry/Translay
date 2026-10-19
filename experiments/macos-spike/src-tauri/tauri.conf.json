@@ -14,8 +14,8 @@
       {
         "label": "settings",
         "title": "Translay Mac Preview",
-        "width": 740,
-        "height": 570,
+        "width": 680,
+        "height": 640,
         "minWidth": 640,
         "minHeight": 480,
         "center": true,
