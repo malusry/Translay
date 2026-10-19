@@ -18,8 +18,12 @@ default = ["desktop"]
 desktop = ["dep:tauri", "dep:tauri-build"]
 
 [dependencies]
+translay-core = { path = "../../../crates/translay-core" }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2.11.5", optional = true, features = ["tray-icon"] }
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3.7"

@@ -3931,7 +3931,17 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "translay-core",
  "windows",
+]
+
+[[package]]
+name = "translay-core"
+version = "0.1.0"
+dependencies = [
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

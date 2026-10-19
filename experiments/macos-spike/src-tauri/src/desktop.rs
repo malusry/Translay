@@ -1,4 +1,8 @@
 use std::sync::Mutex;
+use translay_core::{
+    model_config::{MODEL_CONFIG_FILENAME, ModelConfigStore},
+    model_transport::ModelClient,
+};
 
 use tauri::{
     AppHandle, Emitter, Manager,
@@ -8,7 +12,9 @@ use tauri::{
 };
 
 use crate::{
+    credentials::CredentialStore,
     platform::{self, AccessibilityStatus},
+    settings::{self, SettingsWrites},
     state::{Action, Snapshot, TranslationMode, toggles_selection},
 };
 
@@ -39,7 +45,7 @@ fn open_system_settings() -> Result<(), String> {
     platform::open_system_settings()
 }
 
-fn snapshot(app: &AppHandle) -> Snapshot {
+pub(super) fn snapshot(app: &AppHandle) -> Snapshot {
     *app.state::<Mutex<Snapshot>>()
         .lock()
         .unwrap_or_else(|error| error.into_inner())
@@ -54,7 +60,7 @@ fn tray_image(enabled: bool) -> Image<'static> {
     Image::new_owned(bytes.to_vec(), 32, 32)
 }
 
-fn publish(app: &AppHandle) -> tauri::Result<()> {
+pub(super) fn publish(app: &AppHandle) -> tauri::Result<()> {
     let state = snapshot(app);
     let controls = app.state::<Controls>();
     controls
@@ -78,16 +84,41 @@ fn publish(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn apply(app: &AppHandle, action: Action) -> tauri::Result<()> {
+    let gate = app.state::<SettingsWrites>();
+    let _guard = gate.0.lock().unwrap_or_else(|error| error.into_inner());
     if snapshot(app).exiting {
         return Ok(());
+    }
+    let mut next = snapshot(app);
+    next.apply(action);
+    let store = app.state::<ModelConfigStore>();
+    let saved = match action {
+        Action::ToggleSelectionIcon | Action::SetSelectionIcon(_) => {
+            store.set_selection_icon_enabled(next.selection_icon_enabled)
+        }
+        Action::SelectMode(mode) => store.set_mode(mode),
+        Action::Exit => Ok(()),
+    };
+    if let Err(error) = saved {
+        // A check item has already toggled itself; restore the committed state.
+        let _ = publish(app);
+        return Err(tauri::Error::Io(std::io::Error::other(error)));
     }
     app.state::<Mutex<Snapshot>>()
         .lock()
         .unwrap_or_else(|error| error.into_inner())
-        .apply(action);
+        .clone_from(&next);
     // Native check items toggle themselves before their callback. Re-selecting
     // the current mode must restore its check mark even when state is unchanged.
     publish(app)?;
+    if matches!(action, Action::SelectMode(_)) {
+        match settings::current_view(app) {
+            Ok(view) => app.emit("model-backend-changed", &view)?,
+            Err(error) => {
+                let _ = app.emit("spike-error", error);
+            }
+        }
+    }
     Ok(())
 }
 
@@ -246,11 +277,26 @@ pub fn run() {
     }
     let app = tauri::Builder::default()
         .manage(Mutex::new(Snapshot::default()))
+        .manage(SettingsWrites::default())
+        .manage(CredentialStore)
+        .manage(ModelClient::default())
         .invoke_handler(tauri::generate_handler![
             get_spike_state,
             get_accessibility_status,
             request_accessibility,
-            open_system_settings
+            open_system_settings,
+            settings::get_model_config,
+            settings::get_model_api_key_status,
+            settings::save_model_provider_config,
+            settings::activate_model_backend,
+            settings::save_translation_preferences,
+            settings::clear_model_api_key,
+            settings::test_model_connection,
+            settings::detect_active_local_model,
+            settings::open_provider_api_portal,
+            settings::hide_settings_window,
+            settings::minimize_settings_window,
+            settings::start_settings_dragging
         ])
         .on_menu_event(handle_menu)
         .on_window_event(|window, event| {
@@ -264,12 +310,25 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            let directory = app.path().app_config_dir()?;
+            std::fs::create_dir_all(&directory)?;
+            let config_store =
+                ModelConfigStore::load_from_path(directory.join(MODEL_CONFIG_FILENAME))
+                    .map_err(std::io::Error::other)?;
+            let config = config_store.get();
+            {
+                let state = app.state::<Mutex<Snapshot>>();
+                let mut state = state.lock().unwrap_or_else(|error| error.into_inner());
+                state.apply(Action::SelectMode(config.mode));
+            }
+            app.manage(config_store);
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                 setup_app_menu(app.handle())?;
             }
             setup_tray(app.handle())?;
+            publish(app.handle())?;
             show_settings(app.handle())?;
             Ok(())
         })

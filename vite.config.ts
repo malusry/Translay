@@ -9,7 +9,7 @@ export default defineConfig({
     strictPort: true,
     host: "127.0.0.1",
     watch: {
-      ignored: ["**/src-tauri/**", "**/tests/artifacts/**", "**/release/**"]
+      ignored: ["**/src-tauri/**", "**/crates/**/target/**", "**/tests/artifacts/**", "**/release/**"]
     }
   },
   envPrefix: ["VITE_", "TAURI_"],

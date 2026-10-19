@@ -1,4 +1,5 @@
 use std::{ffi::c_void, ptr::null_mut};
+use translay_core::credentials::{api_key_target, mask_api_key};
 
 use windows::{
     Win32::Security::Credentials::{
@@ -9,7 +10,6 @@ use windows::{
 };
 
 const LEGACY_API_KEY_TARGET: &str = "Translay/model-api-key";
-const API_KEY_TARGET_PREFIX: &str = "Translay/model-api-key";
 const API_KEY_USERNAME: &str = "Translay";
 
 #[derive(Clone, Default)]
@@ -115,52 +115,8 @@ impl CredentialStore {
     }
 }
 
-fn api_key_target(base_url: &str) -> Result<String, String> {
-    let url = reqwest::Url::parse(base_url.trim())
-        .map_err(|_| "服务地址不是有效 URL，无法定位对应的 API Key".to_owned())?;
-    let host = url
-        .host_str()
-        .ok_or_else(|| "服务地址缺少主机名，无法定位对应的 API Key".to_owned())?
-        .to_ascii_lowercase();
-    let scope = if host == "api.deepseek.com" {
-        "deepseek".to_owned()
-    } else if host == "open.bigmodel.cn" {
-        "glm".to_owned()
-    } else {
-        let port = url
-            .port_or_known_default()
-            .map(|value| format!(":{value}"))
-            .unwrap_or_default();
-        let origin = format!("{}://{host}{port}", url.scheme().to_ascii_lowercase());
-        format!("custom-{:016x}", stable_hash(&origin))
-    };
-    Ok(format!("{API_KEY_TARGET_PREFIX}/{scope}"))
-}
-
-fn stable_hash(value: &str) -> u64 {
-    value
-        .as_bytes()
-        .iter()
-        .fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
-            (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
-        })
-}
-
 fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
-fn mask_api_key(value: &str) -> String {
-    let value = value.trim();
-    let characters = value.chars().collect::<Vec<_>>();
-    if characters.len() <= 4 {
-        return "••••".to_owned();
-    }
-    let prefix = if value.starts_with("sk-") { "sk-" } else { "" };
-    let suffix = characters[characters.len() - 4..]
-        .iter()
-        .collect::<String>();
-    format!("{prefix}••••••••{suffix}")
 }
 
 #[cfg(test)]
@@ -199,5 +155,17 @@ mod tests {
         assert_eq!(mask_api_key(&openai_style_key), "sk-••••••••8F3A");
         assert_eq!(mask_api_key("generic-secret-29BC"), "••••••••29BC");
         assert_eq!(mask_api_key("tiny"), "••••");
+    }
+}
+
+impl translay_core::credentials::Credentials for CredentialStore {
+    fn write_api_key(&self, base_url: &str, api_key: &str) -> Result<(), String> {
+        CredentialStore::write_api_key(self, base_url, api_key)
+    }
+    fn read_api_key(&self, base_url: &str) -> Result<Option<String>, String> {
+        CredentialStore::read_api_key(self, base_url)
+    }
+    fn clear_api_key(&self, base_url: &str) -> Result<(), String> {
+        CredentialStore::clear_api_key(self, base_url)
     }
 }

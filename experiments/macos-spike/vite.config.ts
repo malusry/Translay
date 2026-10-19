@@ -11,7 +11,7 @@ export default defineConfig({
     port: 1422,
     strictPort: true,
     fs: { allow: [fileURLToPath(new URL("../..", import.meta.url))] },
-    watch: { ignored: ["**/src-tauri/**"] },
+    watch: { ignored: ["**/src-tauri/**", "**/crates/**/target/**", "**/tests/artifacts/**"] },
   },
   build: { target: "safari15", outDir: "dist", emptyOutDir: true },
 });

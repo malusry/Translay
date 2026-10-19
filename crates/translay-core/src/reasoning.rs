@@ -4,18 +4,18 @@ use serde::Serialize;
 use crate::model_config::{EndpointConfig, ModelBackend, ModelConfig};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct OpenAiReasoningPolicy {
+pub struct OpenAiReasoningPolicy {
     pub thinking: Option<ThinkingControl>,
     pub reasoning_effort: Option<&'static str>,
     pub prompt_control: Option<&'static str>,
 }
 
 impl OpenAiReasoningPolicy {
-    pub(crate) fn has_request_control(self) -> bool {
+    pub fn has_request_control(self) -> bool {
         self.thinking.is_some() || self.reasoning_effort.is_some()
     }
 
-    pub(crate) fn without_request_control(self) -> Self {
+    pub fn without_request_control(self) -> Self {
         Self {
             thinking: None,
             reasoning_effort: None,
@@ -25,20 +25,20 @@ impl OpenAiReasoningPolicy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub(crate) struct ThinkingControl {
+pub struct ThinkingControl {
     #[serde(rename = "type")]
     pub kind: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub(crate) struct AnthropicThinkingControl {
+pub struct AnthropicThinkingControl {
     #[serde(rename = "type")]
     pub kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub budget_tokens: Option<u32>,
 }
 
-pub(crate) fn openai_reasoning_policy(
+pub fn openai_reasoning_policy(
     config: &ModelConfig,
     endpoint: &EndpointConfig,
 ) -> OpenAiReasoningPolicy {
@@ -61,10 +61,7 @@ pub(crate) fn openai_reasoning_policy(
     }
 }
 
-pub(crate) fn anthropic_reasoning_policy(
-    model: &str,
-    enabled: bool,
-) -> Option<AnthropicThinkingControl> {
+pub fn anthropic_reasoning_policy(model: &str, enabled: bool) -> Option<AnthropicThinkingControl> {
     if !enabled {
         return None;
     }

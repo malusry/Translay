@@ -12,6 +12,7 @@ on:
       - "tsconfig.json"
       - "src/shared/**"
       - "src/settings/**"
+      - "crates/translay-core/**"
       - "assets/brand/folded-ribbon/**"
       - "src-tauri/icons/**"
   pull_request:
@@ -23,6 +24,7 @@ on:
       - "tsconfig.json"
       - "src/shared/**"
       - "src/settings/**"
+      - "crates/translay-core/**"
       - "assets/brand/folded-ribbon/**"
       - "src-tauri/icons/**"
 
@@ -52,6 +54,7 @@ jobs:
           workspaces: "experiments/macos-spike/src-tauri -> target"
       - run: npm ci
       - run: npm run macos:check
+      - run: npm run check:core
       - run: cargo check --manifest-path experiments/macos-spike/src-tauri/Cargo.toml --locked
 
   macos:
@@ -87,6 +90,9 @@ jobs:
           node --version
       - run: npm ci
       - run: npm run macos:check
+      - run: npm run check:core
+      - name: Test native settings and disposable Keychain entry
+        run: cargo test --manifest-path experiments/macos-spike/src-tauri/Cargo.toml --lib --locked
       - name: Build isolated app bundle
         run: npm run macos:build -- --target "$SPIKE_TARGET" --bundles app --ci
       - name: Archive app with executable permissions

@@ -1,11 +1,6 @@
 use serde::Serialize;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum TranslationMode {
-    Conversational,
-    Academic,
-}
+pub use translay_core::translation::TranslationMode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {

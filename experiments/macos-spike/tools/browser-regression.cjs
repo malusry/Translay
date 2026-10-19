@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
+const { installMacFixture } = require("./settings-fixture.cjs");
 const { assertFont } = require("../../../tests/browser/font-evidence.cjs");
 
 (async () => {
@@ -68,49 +69,9 @@ const { assertFont } = require("../../../tests/browser/font-evidence.cjs");
     // This is a frontend IPC fixture. It does not exercise native Mac UI or grant permissions.
     const nativePage = await browser.newPage({ viewport: { width: 680, height: 640 } });
     nativePage.on("pageerror", (error) => errors.push(error.message));
-    await nativePage.addInitScript(() => {
-      window.isTauri = true;
-      const callbacks = new Map();
-      const listeners = new Map();
-      const registrations = new Map();
-      let id = 0;
-      window.permissionTrusted = false;
-      window.authorizationRequests = 0;
-      window.initialReads = [];
-      window.emitSpikeState = (payload) => callbacks.get(listeners.get("spike-state"))?.({ payload });
-      window.releaseInitialReads = () => window.initialReads.splice(0).forEach((resolve) => resolve({
-        selectionIconEnabled: true, mode: "conversational", revision: 0, exiting: false,
-      }));
-      window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
-        unregisterListener: (event, listenerId) => {
-          const handler = registrations.get(listenerId);
-          if (listeners.get(event) === handler) listeners.delete(event);
-          registrations.delete(listenerId);
-          callbacks.delete(handler);
-        },
-      };
-      window.__TAURI_INTERNALS__ = {
-        transformCallback: (callback) => { callbacks.set(++id, callback); return id; },
-        unregisterCallback: (callbackId) => callbacks.delete(callbackId),
-        invoke: async (command, args) => {
-          if (command === "plugin:event|listen") {
-            listeners.set(args.event, args.handler);
-            registrations.set(++id, args.handler);
-            return id;
-          }
-          if (command === "plugin:event|unlisten") return;
-          if (command === "get_spike_state") return new Promise((resolve) => window.initialReads.push(resolve));
-          if (command === "request_accessibility") window.authorizationRequests++;
-          if (command === "get_accessibility_status" || command === "request_accessibility") {
-            return { supported: true, trusted: window.permissionTrusted };
-          }
-          if (command === "open_system_settings") return;
-          throw new Error(`Unexpected fixture command: ${command}`);
-        },
-      };
-    });
+    await nativePage.addInitScript(installMacFixture);
     await nativePage.goto(server.resolvedUrls.local[0]);
-    await nativePage.waitForFunction(() => window.initialReads.length > 0);
+    await nativePage.waitForFunction(() => window.initialReads.length > 0 && document.querySelector(".daily-mode")?.disabled === false);
     await nativePage.evaluate(() => {
       window.emitSpikeState({ selectionIconEnabled: false, mode: "academic", revision: 3, exiting: false });
       window.releaseInitialReads();
@@ -127,9 +88,44 @@ const { assertFont } = require("../../../tests/browser/font-evidence.cjs");
     assert(await nativePage.getByRole("button", { name: "已获授权" }).isDisabled());
     await nativePage.evaluate(() => { window.permissionTrusted = false; window.dispatchEvent(new Event("focus")); });
     await nativePage.getByText("未授权", { exact: true }).waitFor();
+    // The real shared Settings controller is editable in native mode.
+    await nativePage.locator(".daily-mode").click();
+    await nativePage.waitForFunction(() => window.modelConfig.mode === "conversational");
+    await nativePage.getByRole("switch", { name: "翻译思考" }).click();
+    await nativePage.waitForFunction(() => window.modelConfig.reasoningEnabled);
+    await nativePage.getByRole("button", { name: "模型", exact: true }).click();
+    await nativePage.locator("#model-name").fill("fixture-updated-local");
+    await nativePage.evaluate(() => { window.failNextSave = true; });
+    await nativePage.getByRole("button", { name: "保存当前配置", exact: true }).click();
+    await nativePage.getByText(/Fixture save failure/).waitFor();
+    assert.equal(await nativePage.locator("#model-name").inputValue(), "fixture-updated-local");
+    await nativePage.getByRole("button", { name: "保存当前配置", exact: true }).click();
+    await nativePage.getByRole("button", { name: "当前配置已保存", exact: true }).waitFor();
+    assert.equal(await nativePage.evaluate(() => window.saveRequests), 2);
+    await nativePage.locator(".provider-test-button").click();
+    await nativePage.locator("#model-name").fill("fixture-new-request");
+    await nativePage.locator(".provider-test-button").click();
+    await nativePage.waitForFunction(() => window.connectionRequests.length === 2);
+    await nativePage.evaluate(() => {
+      window.connectionRequests[1].resolve({ success: true, message: "new fixture", elapsedMs: 222 });
+      window.connectionRequests[0].resolve({ success: false, message: "stale fixture failure", elapsedMs: 999 });
+    });
+    await nativePage.getByText("连接成功 · 222 ms", { exact: true }).waitFor();
+    assert.equal(await nativePage.getByText("stale fixture failure", { exact: false }).count(), 0);
+    await nativePage.getByRole("button", { name: "切换到在线 API", exact: true }).click();
+    await nativePage.locator("#api-key").fill("fake-fixture-only-7F2A");
+    await nativePage.getByRole("button", { name: "保存当前配置", exact: true }).click();
+    await nativePage.getByRole("button", { name: "当前配置已保存", exact: true }).waitFor();
+    await nativePage.locator(".credential-slot").click();
+    await nativePage.getByRole("button", { name: /移除 .*API Key/ }).click();
+    await nativePage.waitForFunction(() => document.querySelector("#api-key")?.value === "");
+    await nativePage.locator(".provider-openai").click({ button: "right" });
+    assert.deepEqual(await nativePage.evaluate(() => window.openedPortals), ["openai"]);
+    await nativePage.screenshot({ path: path.join(artifacts, "native-model-ipc-fixture.png") });
+    await nativePage.getByRole("button", { name: "翻译", exact: true }).click();
     await nativePage.screenshot({ path: path.join(artifacts, "frontend-ipc-fixture.png") });
     assert.deepEqual(errors, []);
-    console.log("PASS: shared translation/local/API settings views and bundled fonts, read-only preview, small-window scrolling, native chrome separation, unsupported preview permissions, stale snapshots, asynchronous authorization and revocation. Native Mac controls and focus were not exercised.");
+    console.log("PASS: shared translation/local/API settings views and bundled fonts, read-only preview, small-window scrolling, native chrome separation, unsupported preview permissions, stale snapshots, asynchronous authorization/revocation, editable native settings, failed-save retry, stale connection isolation, masked credentials and deletion. Native Mac controls and focus were not exercised.");
   } finally {
     if (browser) await browser.close();
     await server.close();

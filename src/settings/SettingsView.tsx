@@ -2,6 +2,7 @@ import {
   useLayoutEffect,
   useRef,
   type FormEvent,
+  type FocusEvent,
   type MouseEvent,
   type ReactNode,
 } from "react";
@@ -29,7 +30,7 @@ export type SettingsStatus = {
   message: string;
 };
 
-interface SettingsViewProps {
+export interface SettingsViewProps {
   windowChrome?: "custom" | "native";
   // Source tabs can still browse both forms; configuration mutations are disabled.
   readOnly?: boolean;
@@ -70,7 +71,7 @@ interface SettingsViewProps {
   onRefreshApiKeyStatus: (baseUrl: string) => void;
   onBeginApiKeyEdit: () => void;
   onSetApiKey: (apiKey: string) => void;
-  onFinishApiKeyEdit: () => void;
+  onFinishApiKeyEdit: (event: FocusEvent<HTMLInputElement>) => void;
   onSetTimeoutSeconds: (seconds: number) => void;
   onTestConnection: () => void;
   onClearApiKey: () => void;
@@ -733,7 +734,8 @@ export function SettingsView({
                   config.backend === "api" &&
                   config.hasApiKey &&
                   editingApiKey && (
-                    <button type="button" disabled={readOnly} onClick={onClearApiKey}>
+                    <button type="button" data-api-key-action disabled={readOnly}
+                      onMouseDown={(event) => event.preventDefault()} onClick={onClearApiKey}>
                       移除 {apiKeyLabel}
                     </button>
                   )}

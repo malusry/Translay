@@ -1,6 +1,7 @@
 // Settings-window UI; system behavior remains in the Rust backend.
 import {
   FormEvent,
+  type FocusEvent,
   MouseEvent,
   useCallback,
   useEffect,
@@ -35,25 +36,12 @@ import {
   type ProviderPreset,
   type TranslationPreferences,
 } from "./settingsState";
-import {
-  activateModelBackend,
-  clearModelApiKey,
-  detectActiveLocalModel,
-  getModelApiKeyStatus,
-  getModelConfig,
-  hideSettingsWindow,
-  minimizeSettingsWindow,
-  onModelBackendChanged,
-  openProviderApiPortal,
-  saveModelProviderConfig,
-  saveTranslationPreferences as saveTranslationPreferencesToBackend,
-  startSettingsDragging,
-  testModelConnection,
-} from "./settingsIpc";
+import * as settingsIpc from "./settingsIpc";
 import {
   SettingsView,
   type SettingsSection,
   type SettingsStatus,
+  type SettingsViewProps,
 } from "./SettingsView";
 import "../shared/uiFonts";
 import "./settings.css";
@@ -77,8 +65,23 @@ const initialConfig: ModelConfigView = {
   apiKeyHint: null,
 };
 
-export function Settings() {
-  const [section, setSection] = useState<SettingsSection>("model");
+type SettingsProps = Pick<SettingsViewProps, "windowChrome" | "readOnly" | "notice" | "translationExtras"> & {
+  initialSection?: SettingsSection;
+  ipc?: typeof settingsIpc;
+};
+
+export function Settings({
+  windowChrome, readOnly, notice, translationExtras,
+  initialSection = "model", ipc = settingsIpc,
+}: SettingsProps = {}) {
+  const {
+    activateModelBackend, clearModelApiKey, detectActiveLocalModel,
+    getModelApiKeyStatus, getModelConfig, hideSettingsWindow,
+    minimizeSettingsWindow, onModelBackendChanged, openProviderApiPortal,
+    saveModelProviderConfig, saveTranslationPreferences: saveTranslationPreferencesToBackend,
+    startSettingsDragging, testModelConnection,
+  } = ipc;
+  const [section, setSection] = useState<SettingsSection>(initialSection);
   const [config, setConfig] = useState(initialConfig);
   const [activeConfig, setActiveConfig] = useState<ModelConfigView | null>(null);
   const [apiKey, setApiKey] = useState("");
@@ -156,7 +159,7 @@ export function Settings() {
     } catch (error) {
       setStatus({ kind: "error", message: String(error) });
     }
-  }, [invalidateConnectionTest]);
+  }, [getModelConfig, invalidateConnectionTest]);
 
   useEffect(() => {
     void load();
@@ -200,7 +203,7 @@ export function Settings() {
       disposed = true;
       stopListening?.();
     };
-  }, [load, invalidateConnectionTest]);
+  }, [load, invalidateConnectionTest, onModelBackendChanged]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -212,7 +215,7 @@ export function Settings() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [hideSettingsWindow]);
 
   useEffect(
     () => () => {
@@ -653,7 +656,8 @@ export function Settings() {
     invalidateConnectionTest();
   };
 
-  const finishApiKeyEdit = () => {
+  const finishApiKeyEdit = (event: FocusEvent<HTMLInputElement>) => {
+    if (event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest("[data-api-key-action]")) return;
     if (config.hasApiKey && !apiKey.trim()) {
       setEditingApiKey(false);
     }
@@ -682,6 +686,10 @@ export function Settings() {
 
   return (
     <SettingsView
+      windowChrome={windowChrome}
+      readOnly={readOnly}
+      notice={notice}
+      translationExtras={translationExtras}
       section={section}
       config={config}
       activeHealth={activeHealth}

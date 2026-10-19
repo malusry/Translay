@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SettingsView, type SettingsSection } from "../../../src/settings/SettingsView";
-import type { ModelBackend, ModelConfigView } from "../../../src/settings/modelSettings";
-import { apiKeyLabelForPreset, providerPresetForConfig, reasoningDescriptionForConfig } from "../../../src/settings/settingsState";
+import { Settings } from "../../../src/settings/Settings";
+import { previewSettings } from "./previewSettings";
 import {
   acceptSnapshot,
   getAccessibility,
@@ -15,12 +14,7 @@ import {
   type Snapshot,
 } from "./ipc";
 
-const idle = { kind: "idle", message: "" } as const;
-const unavailable = () => {};
-
 export default function App() {
-  const [section, setSection] = useState<SettingsSection>("translation");
-  const [backend, setBackend] = useState<ModelBackend>("local");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [accessibility, setAccessibility] = useState<AccessibilityStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -101,46 +95,17 @@ export default function App() {
       ? "需要 Mac 验证"
       : accessibility.trusted ? "已授权" : "未授权";
 
-  // Display the real shared view without connecting prototype fields to model
-  // services or credentials. Backend tabs only select which form to preview.
-  const config: ModelConfigView = {
-    backend,
-    mode: snapshot?.mode ?? "conversational",
-    reasoningEnabled: false,
-    local: { baseUrl: "http://127.0.0.1:11434/v1", model: "" },
-    api: { baseUrl: "https://api.openai.com/v1", model: "" },
-    localModels: {},
-    apiModels: {},
-    timeoutSeconds: 60,
-    hasApiKey: false,
-    apiKeyHint: null,
-  };
-
   return (
-    <SettingsView
+    <Settings
       windowChrome="native"
-      readOnly
-      section={section}
-      config={config}
-      activeHealth="idle"
-      activeSummary="配置样式预览 · 尚未连接模型"
-      reasoningDescription={reasoningDescriptionForConfig(config)}
-      loaded={snapshot !== null && !snapshot.exiting}
-      translationSaving={false}
-      modelSaving={false}
-      modelSwitching={false}
-      saveConfirmed={false}
-      providerDirty={false}
-      apiKeyLabel={apiKeyLabelForPreset(providerPresetForConfig(config))}
-      apiKey=""
-      editingApiKey={false}
-      connectionStatus={idle}
-      status={error ? { kind: "error", message: error } : idle}
-      modelSourceDescription="切换查看配置样式；模型连接与保存尚未接入"
+      initialSection="translation"
+      readOnly={!native}
+      ipc={native ? undefined : previewSettings}
       notice={
         <div className="mac-preview-notice" role="note">
           <span>{native ? "Mac 开发预览" : "浏览器布局预览"}</span>
-          <span>配置项仅供预览，尚未接入模型与保存。</span>
+          <span>{native ? "使用独立配置；划词取词暂不可用。" : "仅预览布局，不连接或保存配置。"}</span>
+          {error && <span role="alert">{error}</span>}
           {snapshot?.exiting && <span role="status">正在退出…</span>}
         </div>
       }
@@ -165,24 +130,6 @@ export default function App() {
           <p className="mac-scope-note">划词开关暂不启动自动取词。菜单栏、窗口与权限需在 Mac 中验证。</p>
         </section>
       }
-      onSelectSection={setSection}
-      onWindowMouseDown={unavailable}
-      onMinimize={unavailable}
-      onClose={unavailable}
-      onSubmit={(event) => event.preventDefault()}
-      onSelectMode={unavailable}
-      onToggleReasoning={unavailable}
-      onSelectBackend={setBackend}
-      onSelectProviderPreset={unavailable}
-      onOpenProviderPortal={unavailable}
-      onSetEndpoint={unavailable}
-      onRefreshApiKeyStatus={unavailable}
-      onBeginApiKeyEdit={unavailable}
-      onSetApiKey={unavailable}
-      onFinishApiKeyEdit={unavailable}
-      onSetTimeoutSeconds={unavailable}
-      onTestConnection={unavailable}
-      onClearApiKey={unavailable}
     />
   );
 }

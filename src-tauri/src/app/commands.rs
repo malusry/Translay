@@ -10,8 +10,7 @@ use crate::{
     explanation::{ExplanationContent, until_cancelled},
     latest_capture_store::LatestCaptureStore,
     model_config::{
-        ApiKeyStatus, ModelBackend, ModelConfig, ModelConfigStore, ModelConfigView,
-        SaveModelConfig, remember_api_model, remember_local_model, validate_config,
+        ApiKeyStatus, ModelBackend, ModelConfigStore, ModelConfigView, SaveModelConfig,
     },
     models,
     overlay_manager::OverlayManager,
@@ -24,34 +23,9 @@ use super::{local_model_detection, model_backend, windows};
 
 static OVERLAY_FRONTEND_READY: AtomicBool = AtomicBool::new(false);
 
-const PROVIDER_API_PORTALS: [(&str, &str); 11] = [
-    ("deepseek", "https://platform.deepseek.com/api_keys"),
-    ("openai", "https://platform.openai.com/api-keys"),
-    ("anthropic", "https://platform.claude.com/settings/keys"),
-    (
-        "zhipu",
-        "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys",
-    ),
-    ("moonshot", "https://platform.moonshot.cn/console/api-keys"),
-    ("gemini", "https://aistudio.google.com/apikey"),
-    ("ollama", "https://docs.ollama.com/api/openai-compatibility"),
-    ("lmstudio", "https://lmstudio.ai/docs/developer"),
-    ("jan", "https://www.jan.ai/docs/desktop/api-server"),
-    (
-        "llamacpp",
-        "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
-    ),
-    (
-        "vllm",
-        "https://docs.vllm.ai/en/stable/getting_started/quickstart/",
-    ),
-];
-
-fn provider_api_portal_url(provider: &str) -> Option<&'static str> {
-    PROVIDER_API_PORTALS
-        .iter()
-        .find_map(|(id, url)| (*id == provider).then_some(*url))
-}
+#[cfg(test)]
+use translay_core::portals::PROVIDER_API_PORTALS;
+use translay_core::portals::provider_api_portal_url;
 
 #[tauri::command]
 pub(super) fn open_provider_api_portal(provider: String) -> Result<(), String> {
@@ -236,13 +210,7 @@ pub(super) fn model_config_view(
     config: &ModelConfigStore,
     credentials: &CredentialStore,
 ) -> Result<ModelConfigView, String> {
-    let config = config.get();
-    let status = read_api_key_status(credentials, &config.api.base_url)?;
-    Ok(ModelConfigView {
-        config,
-        has_api_key: status.has_api_key,
-        api_key_hint: status.api_key_hint,
-    })
+    translay_core::settings::model_config_view(config, credentials)
 }
 
 #[tauri::command]
@@ -265,11 +233,7 @@ fn read_api_key_status(
     credentials: &CredentialStore,
     base_url: &str,
 ) -> Result<ApiKeyStatus, String> {
-    let api_key_hint = credentials.api_key_hint(base_url)?;
-    Ok(ApiKeyStatus {
-        has_api_key: api_key_hint.is_some(),
-        api_key_hint,
-    })
+    translay_core::settings::api_key_status(credentials, base_url)
 }
 
 #[tauri::command]
@@ -279,31 +243,7 @@ pub(super) fn save_model_provider_config(
     config: tauri::State<'_, ModelConfigStore>,
     credentials: tauri::State<'_, CredentialStore>,
 ) -> Result<ModelConfigView, String> {
-    let provider = input.backend;
-    let mut next = config.get();
-    match provider {
-        ModelBackend::Local => {
-            next.local = input.local;
-            remember_local_model(&mut next);
-        }
-        ModelBackend::Api => {
-            next.api = input.api;
-            remember_api_model(&mut next);
-        }
-    }
-    next.timeout_seconds = input.timeout_seconds;
-
-    // Validate the provider being edited without changing the active provider.
-    let mut validation_candidate = next.clone();
-    validation_candidate.backend = provider;
-    validate_config(&validation_candidate)?;
-    let api_base_url = next.api.base_url.clone();
-    config.save(next)?;
-    if provider == ModelBackend::Api
-        && let Some(api_key) = input.api_key.filter(|value| !value.trim().is_empty())
-    {
-        credentials.write_api_key(&api_base_url, &api_key)?;
-    }
+    translay_core::settings::save_provider_config(config.inner(), credentials.inner(), input)?;
     model_backend::refresh_tray_model_switch(&app, config.inner(), credentials.inner());
     model_config_view(config.inner(), credentials.inner())
 }
@@ -327,10 +267,7 @@ pub(super) fn save_translation_preferences(
     config: tauri::State<'_, ModelConfigStore>,
     credentials: tauri::State<'_, CredentialStore>,
 ) -> Result<(), String> {
-    let mut next = config.get();
-    next.mode = mode;
-    next.reasoning_enabled = reasoning_enabled;
-    config.save(next)?;
+    translay_core::settings::save_translation_preferences(config.inner(), mode, reasoning_enabled)?;
     model_backend::refresh_tray_model_switch(&app, config.inner(), credentials.inner());
     Ok(())
 }
@@ -352,17 +289,7 @@ pub(super) async fn test_model_connection(
     input: SaveModelConfig,
     service: tauri::State<'_, TranslationService>,
 ) -> Result<ConnectionTestResult, String> {
-    let config = ModelConfig {
-        backend: input.backend,
-        mode: input.mode,
-        selection_icon_enabled: true,
-        reasoning_enabled: input.reasoning_enabled,
-        local: input.local,
-        api: input.api,
-        local_models: Default::default(),
-        api_models: Default::default(),
-        timeout_seconds: input.timeout_seconds,
-    };
+    let config = translay_core::settings::connection_config(&input);
     let service = service.inner().clone();
     Ok(service
         .test_connection_with_config(config, input.api_key)
