@@ -32,6 +32,7 @@ Translay Mac Preview：测试包与启动诊断
 SHA256SUMS.txt：诊断脚本的 SHA-256（不适用于 GitHub 下载的外层 ZIP）。
 package-verification.txt：CPU、签名完整性及 ZIP 解压一致性检查结果。
 ci-policy-diagnostic.txt：CI 机器上的系统策略检查结果，不代表你的 Mac 的检查结果。
+control-policy-diagnostic.txt：同机最小 C 对照程序的策略结果；相同错误不表示原型已安全或获放行。
 diagnose-macos.sh：上述诊断脚本。
 
 Apple M 系列芯片使用 aarch64-apple-darwin；Intel 使用 x86_64-apple-darwin。

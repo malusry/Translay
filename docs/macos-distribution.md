@@ -27,6 +27,8 @@ Apple 芯片构建使用 GitHub 的 `xcode-27` 预览镜像，Intel 交叉构建
 
 `tools/test-package-verifier.sh` 用实际构建包的临时副本验证拒绝错误 CPU、丢失执行权限、签名后修改文件，以及归档中被修改的 App。临时副本不会替代正常测试包。
 
+`tools/collect-policy-control.sh` 在同一 CI 机器编译一个仅含 `int main(void) { return 0; }` 的 C App，使用相同 CPU 目标、最低系统版本、临时签名和 Hardened Runtime，记录系统策略与退出码。对照程序不链接 Translay 或 Tauri，不启动、不分发，结束后清理。其 `control-policy-diagnostic.txt` 用来判断某个诊断是否也出现在最小对照上；相同错误不能证明 Translay 无害、原始拦截为误报或当前 App 已获放行，也不会改变原型的分发门槛。
+
 `Translay-Mac-Diagnostics-<target>` 提供诊断脚本及其 SHA-256、完整性验证结果和 CI 策略报告，不包含 App。未来通过策略门槛后单独上传的应用附件包含内层 ZIP 与对应摘要。GitHub 外层 ZIP 有自己的摘要，不能与内层 ZIP 或脚本的值混用。
 
 以下结果必须分别记录：

@@ -122,6 +122,10 @@ jobs:
             "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
             "$RUNNER_TEMP/translay-package/Translay-Mac-Preview-$SPIKE_TARGET.zip" \
             "$SPIKE_TARGET"
+      - name: Record policy results for a minimal C control without launching it
+        run: |
+          bash experiments/macos-spike/tools/collect-policy-control.sh "$SPIKE_TARGET" \
+            > "$RUNNER_TEMP/translay-package/control-policy-diagnostic.txt" 2>&1
       - name: Record policy assessment without launching app
         id: policy
         run: |
@@ -139,6 +143,8 @@ jobs:
           This prototype is ad-hoc signed and **not notarized**. The policy report records
           rejections as evidence; it does not override them or certify the app as safe.
           CI does not reproduce a browser download or an interactive first launch.
+          A minimal C control is also assessed without execution. Matching errors
+          help compare the environment; they do not clear Translay or prove a false positive.
           App archives are withheld unless signature integrity and both policy assessments pass.
           Do not bypass a warning that the app contains malware or will damage your computer.
           SUMMARY
@@ -148,7 +154,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/translay-diagnostic"
           cp experiments/macos-spike/tools/diagnose-macos.sh "$RUNNER_TEMP/translay-diagnostic/"
           cp experiments/macos-spike/MACOS-TESTING.txt "$RUNNER_TEMP/translay-diagnostic/"
-          for report in package-verification.txt ci-policy-diagnostic.txt; do
+          for report in package-verification.txt ci-policy-diagnostic.txt control-policy-diagnostic.txt; do
             if [ -f "$RUNNER_TEMP/translay-package/$report" ]; then
               cp "$RUNNER_TEMP/translay-package/$report" "$RUNNER_TEMP/translay-diagnostic/"
             fi
