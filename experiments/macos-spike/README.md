@@ -64,19 +64,30 @@ npm run macos:build -- --target x86_64-apple-darwin --bundles app --ci
 
 产物在本目录 `src-tauri/target/<target>/release/bundle/macos/`。没有指定 target 时，路径中不含 `<target>`。
 
-预览包使用 ad-hoc 签名，尚未获得 Developer ID 签名及 Apple 公证；从网络下载后，macOS 可能要求在「隐私与安全性」中确认打开。发布用签名与公证属于后续阶段。辅助功能授权绑定实际程序身份，开发启动与打包程序需要分别核实授权。
+预览包使用 ad-hoc 签名，尚未获得 Developer ID 签名及 Apple 公证。完整性验证不代表系统允许运行；若系统提示「将对电脑造成伤害」「包含恶意软件」或 App 损坏，应先保留提示并运行诊断，不能直接归因为普通的未验证开发者拦截。辅助功能授权绑定实际程序身份，开发启动与打包程序需要分别核实授权。
+
+启动诊断工具随测试包提供，不需要运行 App、修改系统安全设置或安装 Node.js。将 `diagnose-macos.sh` 复制到桌面，然后在终端运行：
+
+```sh
+/bin/bash "$HOME/Desktop/diagnose-macos.sh" > "$HOME/Desktop/Translay-Mac-diagnostic.txt" 2>&1
+```
+
+默认检查 `/Applications/Translay Mac Preview.app`；如 App 在其他位置，可将其路径作为第一个参数传入。App 已移除时，不需要还原或尝试启动，脚本仍会记录系统信息及能访问到的近期相关日志。分享报告前检查用户名和路径。完整说明见 [`MACOS-TESTING.txt`](MACOS-TESTING.txt)，分发方案见 [`docs/macos-distribution.md`](../../docs/macos-distribution.md)。
 
 ## GitHub 构建
 
-`.github/workflows/macos-spike.yml` 在 `codex/macos-*` 分支的相关代码 push、相关 PR 或手动触发时执行。Windows job 检查原型前端、状态逻辑与公共 Rust 编译，macOS job 分别运行共享库、原型库及临时 Keychain 数据操作测试，构建 Apple Silicon 和 Intel 包。
+`.github/workflows/macos-spike.yml` 在 `codex/macos-*` 分支的相关代码 push、相关 PR 或手动触发时执行。Windows job 检查原型前端、状态逻辑与公共 Rust 编译，macOS job 分别运行共享库、原型库及临时 Keychain 数据操作测试，构建 Apple Silicon 和 Intel 包。Apple Silicon job 使用 `xcode-27` 的 macOS 27 预览环境，Intel 交叉构建使用 `macos-26`；实际系统版本由每次运行记录。
 
-在 GitHub 的 Actions → macOS Prototype → 对应运行 → Artifacts 下载测试产物。归档前使用 `ditto` 保存 `.app` 的目录和可执行权限，产物保留 14 天。该工作流上传测试产物，不创建或发布正式 Release。
+在 GitHub 的 Actions → macOS Prototype → 对应运行 → Artifacts 下载 `Translay-Mac-Preview-<target>`。解开 GitHub 外层 ZIP 后，可看到包含 `.app` 的内层 ZIP、`SHA256SUMS.txt`、验证报告、诊断脚本及使用说明。内层归档使用 `ditto` 保存可执行权限，严格检查签名和解压往返一致性，并用被修改的临时副本验证检查会拒绝异常包。完整性检查失败时不上传 App，仅尽可能保留 `Translay-Mac-Verification-<target>` 诊断附件。
+
+`ci-policy-diagnostic.txt` 记录 CI 机器的系统策略结果；临时签名包可能被拒绝，报告完成不表示通过 Gatekeeper。CI 不启动测试 App，也不复现浏览器下载后的隔离状态。测试产物保留 14 天，不创建正式 Release。
 
 CI 的编译结果与真实交互验收分别记录。以下清单需要可交互的 Mac 环境执行。
 
 ## 真机验收清单
 
 - [ ] 记录 commit、macOS 版本、机器架构、开发／打包启动方式。
+- [ ] 记录浏览器下载后的首次打开结果；分别检查签名完整性、系统策略和公证状态。有害内容提示先诊断，不将其视为普通开发者身份提醒。
 - [ ] 单击菜单栏图标一次只切换一次开关；图案及菜单勾选同步；模式保持原值。
 - [ ] 快速连续点击两次回到原开关值；重复多次没有延迟回跳。
 - [ ] 右键及触控板次要点按仅打开菜单；Control-点按也进入菜单路径。Control-点按的 AppKit 事件映射尚未验证。

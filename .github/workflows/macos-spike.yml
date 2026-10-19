@@ -59,12 +59,18 @@ jobs:
 
   macos:
     name: Build ${{ matrix.target }}
-    runs-on: macos-latest
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+        include:
+          # Pin the Apple Silicon build to the macOS 27 preview image. The actual
+          # OS version is recorded below; this is not a GUI first-launch test.
+          - target: aarch64-apple-darwin
+            runner: xcode-27
+          - target: x86_64-apple-darwin
+            runner: macos-26
     env:
       SPIKE_TARGET: ${{ matrix.target }}
       APPLE_SIGNING_IDENTITY: "-"
@@ -97,12 +103,55 @@ jobs:
         run: npm run macos:build -- --target "$SPIKE_TARGET" --bundles app --ci
       - name: Archive app with executable permissions
         run: |
+          mkdir -p "$RUNNER_TEMP/translay-package"
           ditto -c -k --sequesterRsrc --keepParent \
             "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
-            "$RUNNER_TEMP/Translay-Mac-Preview-$SPIKE_TARGET.zip"
-      - uses: actions/upload-artifact@v7
+            "$RUNNER_TEMP/translay-package/Translay-Mac-Preview-$SPIKE_TARGET.zip"
+      - name: Verify signature, architecture and archive round trip
+        run: |
+          bash experiments/macos-spike/tools/verify-package.sh \
+            "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
+            "$RUNNER_TEMP/translay-package/Translay-Mac-Preview-$SPIKE_TARGET.zip" \
+            "$SPIKE_TARGET" 2>&1 | tee "$RUNNER_TEMP/translay-package/package-verification.txt"
+      - name: Exercise invalid-package rejection
+        run: |
+          bash experiments/macos-spike/tools/test-package-verifier.sh \
+            "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
+            "$RUNNER_TEMP/translay-package/Translay-Mac-Preview-$SPIKE_TARGET.zip" \
+            "$SPIKE_TARGET"
+      - name: Record policy assessment without launching app
+        run: |
+          bash experiments/macos-spike/tools/diagnose-macos.sh \
+            "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
+            > "$RUNNER_TEMP/translay-package/ci-policy-diagnostic.txt" 2>&1
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ### macOS prototype verification
+          Signature integrity and archive checks are separate from system policy acceptance.
+          This prototype is ad-hoc signed and **not notarized**. The policy report records
+          rejections as evidence; it does not override them or certify the app as safe.
+          CI does not reproduce a browser download or an interactive first launch.
+          Do not bypass a warning that the app contains malware or will damage your computer.
+          SUMMARY
+      - name: Include checksums and user diagnostic
+        run: |
+          cp experiments/macos-spike/tools/diagnose-macos.sh "$RUNNER_TEMP/translay-package/"
+          cp experiments/macos-spike/MACOS-TESTING.txt "$RUNNER_TEMP/translay-package/"
+          cd "$RUNNER_TEMP/translay-package"
+          shasum -a 256 "Translay-Mac-Preview-$SPIKE_TARGET.zip" diagnose-macos.sh > SHA256SUMS.txt
+      - name: Upload verified development archive
+        uses: actions/upload-artifact@v7
         with:
           name: Translay-Mac-Preview-${{ matrix.target }}
-          path: ${{ runner.temp }}/Translay-Mac-Preview-${{ matrix.target }}.zip
+          path: ${{ runner.temp }}/translay-package/
           if-no-files-found: error
+          retention-days: 14
+      - name: Retain verification evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Translay-Mac-Verification-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/translay-package/package-verification.txt
+            ${{ runner.temp }}/translay-package/ci-policy-diagnostic.txt
+          if-no-files-found: warn
           retention-days: 14
