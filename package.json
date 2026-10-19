@@ -25,6 +25,11 @@
     "acceptance": "node tools/acceptance.cjs",
     "app:build": "tauri build --bundles nsis",
     "app:build:exe": "tauri build --no-bundle",
+    "macos:preview": "npm --prefix experiments/macos-spike run dev",
+    "macos:build:frontend": "npm --prefix experiments/macos-spike run build",
+    "macos:check": "npm run macos:build:frontend && cargo fmt --manifest-path experiments/macos-spike/src-tauri/Cargo.toml --all -- --check && cargo test --manifest-path experiments/macos-spike/src-tauri/Cargo.toml --no-default-features --locked",
+    "macos:dev": "node experiments/macos-spike/tools/tauri.mjs dev",
+    "macos:build": "node experiments/macos-spike/tools/tauri.mjs build",
     "tauri": "tauri"
   },
   "dependencies": {

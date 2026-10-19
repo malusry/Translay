@@ -1,0 +1,25 @@
+[package]
+name = "translay-macos-spike"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Isolated macOS interaction prototype for Translay"
+
+[lib]
+name = "translay_macos_spike"
+
+[[bin]]
+name = "translay-macos-spike"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[features]
+default = ["desktop"]
+desktop = ["dep:tauri", "dep:tauri-build"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2.11.5", optional = true, features = ["tray-icon"] }
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", optional = true }

@@ -1,0 +1,100 @@
+name: macOS Prototype
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["codex/macos-*"]
+    paths:
+      - "experiments/macos-spike/**"
+      - ".github/workflows/macos-spike.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "src/shared/**"
+      - "assets/brand/folded-ribbon/**"
+      - "src-tauri/icons/**"
+  pull_request:
+    paths:
+      - "experiments/macos-spike/**"
+      - ".github/workflows/macos-spike.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "src/shared/**"
+      - "assets/brand/folded-ribbon/**"
+      - "src-tauri/icons/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-spike-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable:
+    name: Prototype portable checks
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "experiments/macos-spike/src-tauri -> target"
+      - run: npm ci
+      - run: npm run macos:check
+      - run: cargo check --manifest-path experiments/macos-spike/src-tauri/Cargo.toml --locked
+
+  macos:
+    name: Build ${{ matrix.target }}
+    runs-on: macos-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+    env:
+      SPIKE_TARGET: ${{ matrix.target }}
+      APPLE_SIGNING_IDENTITY: "-"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "experiments/macos-spike/src-tauri -> target"
+      - name: Record build environment
+        run: |
+          sw_vers
+          uname -m
+          rustc --version
+          node --version
+      - run: npm ci
+      - run: npm run macos:check
+      - name: Build isolated app bundle
+        run: npm run macos:build -- --target "$SPIKE_TARGET" --bundles app --ci
+      - name: Archive app with executable permissions
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
+            "$RUNNER_TEMP/Translay-Mac-Preview-$SPIKE_TARGET.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Translay-Mac-Preview-${{ matrix.target }}
+          path: ${{ runner.temp }}/Translay-Mac-Preview-${{ matrix.target }}.zip
+          if-no-files-found: error
+          retention-days: 14
