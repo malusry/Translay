@@ -1,0 +1,48 @@
+/* Shared settings.css owns the visual design. Only Mac content and native
+   window layout adjustments belong here. Keep the bundled brand fonts first. */
+:root {
+  --font-interface: "TranslayInterface", -apple-system, "PingFang SC", sans-serif;
+  --font-display: "TranslayDisplay", -apple-system, "PingFang SC", sans-serif;
+  --font-reading: "TranslayReading", "PingFang SC", -apple-system, sans-serif;
+}
+
+.settings-content { min-height: 0; }
+.settings-header, .settings-footer { flex-shrink: 0; }
+.settings-body { overflow-y: auto; }
+
+.mac-preview-notice {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 4px 8px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text-soft);
+  background: var(--brand-soft);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.mac-system-panel {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.mac-selection-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.mac-selection-status > div { min-width: 0; }
+.mac-selection-status strong { display: block; color: var(--text-soft); font-size: 11px; }
+.mac-selection-status small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.7; }
+.mac-state-pill { flex-shrink: 0; padding: 4px 8px; border-radius: 6px; color: var(--muted); background: var(--sidebar); font-size: 10px; }
+.mac-state-pill.enabled { color: var(--success-text); background: var(--surface-sage); }
+
+.mac-permission-heading { margin-bottom: 10px; }
+.mac-permission-status { flex-shrink: 0; color: var(--muted); font-size: 10px; }
+.mac-permission-status.trusted { color: var(--success-text); }
+.panel .mac-permission-help, .panel .mac-scope-note { line-height: 1.8; }
+.panel .mac-scope-note { margin-top: 12px; }
+.mac-permission-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.mac-permission-actions button { padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; color: var(--text-soft); background: var(--control); font-size: 10px; }
+.mac-permission-actions button:hover:not(:disabled) { border-color: var(--brand-sage); background: var(--control-hover); }
+.mac-permission-actions button:focus-visible { outline: 2px solid var(--brand-sage); outline-offset: 2px; }
+.mac-permission-actions button:disabled { cursor: default; opacity: 0.5; }

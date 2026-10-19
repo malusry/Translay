@@ -1,0 +1,183 @@
+name: macOS Prototype
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["codex/macos-*"]
+    paths:
+      - "experiments/macos-spike/**"
+      - ".github/workflows/macos-spike.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "src/shared/**"
+      - "src/settings/**"
+      - "crates/translay-core/**"
+      - "assets/brand/folded-ribbon/**"
+      - "src-tauri/icons/**"
+  pull_request:
+    paths:
+      - "experiments/macos-spike/**"
+      - ".github/workflows/macos-spike.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "src/shared/**"
+      - "src/settings/**"
+      - "crates/translay-core/**"
+      - "assets/brand/folded-ribbon/**"
+      - "src-tauri/icons/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-spike-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable:
+    name: Prototype portable checks
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "experiments/macos-spike/src-tauri -> target"
+      - run: npm ci
+      - run: npm run macos:check
+      - run: npm run check:core
+      - run: cargo check --manifest-path experiments/macos-spike/src-tauri/Cargo.toml --locked
+
+  macos:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Pin the Apple Silicon build to the macOS 27 preview image. The actual
+          # OS version is recorded below; this is not a GUI first-launch test.
+          - target: aarch64-apple-darwin
+            runner: xcode-27
+          - target: x86_64-apple-darwin
+            runner: macos-26
+    env:
+      SPIKE_TARGET: ${{ matrix.target }}
+      APPLE_SIGNING_IDENTITY: "-"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "experiments/macos-spike/src-tauri -> target"
+      - name: Record build environment
+        run: |
+          sw_vers
+          uname -m
+          rustc --version
+          node --version
+      - run: npm ci
+      - run: npm run macos:check
+      - run: npm run check:core
+      - name: Test native settings and disposable Keychain entry
+        run: cargo test --manifest-path experiments/macos-spike/src-tauri/Cargo.toml --lib --locked
+      - name: Build isolated app bundle
+        run: npm run macos:build -- --target "$SPIKE_TARGET" --bundles app --ci
+      - name: Archive app with executable permissions
+        run: |
+          mkdir -p "$RUNNER_TEMP/translay-package"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
+            "$RUNNER_TEMP/translay-package/Translay-Mac-Preview-$SPIKE_TARGET.zip"
+      - name: Verify signature, architecture and archive round trip
+        run: |
+          bash experiments/macos-spike/tools/verify-package.sh \
+            "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
+            "$RUNNER_TEMP/translay-package/Translay-Mac-Preview-$SPIKE_TARGET.zip" \
+            "$SPIKE_TARGET" 2>&1 | tee "$RUNNER_TEMP/translay-package/package-verification.txt"
+      - name: Exercise invalid-package rejection
+        run: |
+          bash experiments/macos-spike/tools/test-package-verifier.sh \
+            "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
+            "$RUNNER_TEMP/translay-package/Translay-Mac-Preview-$SPIKE_TARGET.zip" \
+            "$SPIKE_TARGET"
+      - name: Record policy results for a minimal C control without launching it
+        run: |
+          bash experiments/macos-spike/tools/collect-policy-control.sh "$SPIKE_TARGET" \
+            > "$RUNNER_TEMP/translay-package/control-policy-diagnostic.txt" 2>&1
+      - name: Record policy assessment without launching app
+        id: policy
+        run: |
+          if bash experiments/macos-spike/tools/diagnose-macos.sh --require-policy-acceptance \
+            "experiments/macos-spike/src-tauri/target/$SPIKE_TARGET/release/bundle/macos/Translay Mac Preview.app" \
+            > "$RUNNER_TEMP/translay-package/ci-policy-diagnostic.txt" 2>&1; then
+            echo "distribution_ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "distribution_ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::App archive withheld: system policy assessment did not accept this bundle. Only diagnostics will be uploaded."
+          fi
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ### macOS prototype verification
+          Signature integrity and archive checks are separate from system policy acceptance.
+          This prototype is ad-hoc signed and **not notarized**. The policy report records
+          rejections as evidence; it does not override them or certify the app as safe.
+          CI does not reproduce a browser download or an interactive first launch.
+          A minimal C control is also assessed without execution. Matching errors
+          help compare the environment; they do not clear Translay or prove a false positive.
+          App archives are withheld unless signature integrity and both policy assessments pass.
+          Do not bypass a warning that the app contains malware or will damage your computer.
+          SUMMARY
+      - name: Include checksums and user diagnostic
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/translay-diagnostic"
+          cp experiments/macos-spike/tools/diagnose-macos.sh "$RUNNER_TEMP/translay-diagnostic/"
+          cp experiments/macos-spike/MACOS-TESTING.txt "$RUNNER_TEMP/translay-diagnostic/"
+          for report in package-verification.txt ci-policy-diagnostic.txt control-policy-diagnostic.txt; do
+            if [ -f "$RUNNER_TEMP/translay-package/$report" ]; then
+              cp "$RUNNER_TEMP/translay-package/$report" "$RUNNER_TEMP/translay-diagnostic/"
+            fi
+          done
+          cd "$RUNNER_TEMP/translay-diagnostic"
+          shasum -a 256 diagnose-macos.sh > SHA256SUMS.txt
+          if [ -f "$RUNNER_TEMP/translay-package/Translay-Mac-Preview-$SPIKE_TARGET.zip" ]; then
+            cd "$RUNNER_TEMP/translay-package"
+            shasum -a 256 "Translay-Mac-Preview-$SPIKE_TARGET.zip" > SHA256SUMS.txt
+          fi
+      - name: Upload development app only after system policy acceptance
+        if: success() && steps.policy.outputs.distribution_ready == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Translay-Mac-Preview-${{ matrix.target }}
+          path: ${{ runner.temp }}/translay-package/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload diagnostic tool and verification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Translay-Mac-Diagnostics-${{ matrix.target }}
+          path: ${{ runner.temp }}/translay-diagnostic/
+          if-no-files-found: warn
+          retention-days: 14

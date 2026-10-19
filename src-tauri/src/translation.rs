@@ -4,12 +4,7 @@ pub const AUTO_SOURCE_LANGUAGE: &str = "auto";
 // The provider resolves direction within the same translation request.
 pub const DEFAULT_TARGET_LANGUAGE: &str = "auto";
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum TranslationMode {
-    Conversational,
-    Academic,
-}
+pub use translay_core::translation::TranslationMode;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

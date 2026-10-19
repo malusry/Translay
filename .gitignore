@@ -2,6 +2,7 @@ node_modules/
 dist/
 release/
 src-tauri/target/
+crates/translay-core/target/
 src-tauri/target-*/
 .cargo-target-*/
 .translay-webviews/

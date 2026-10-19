@@ -1,0 +1,51 @@
+Translay Mac Preview：测试包与启动诊断
+
+这是诊断附件，不需要安装或启动 Translay，附件不包含 App。
+当前原型仍使用临时（ad-hoc）签名，尚未经过 Apple 公证。
+完整性检查通过不代表已获得系统放行，也不代表通过了恶意软件检查。
+若系统提示“将对电脑造成伤害”或“包含恶意软件”，暂停打开并先诊断。
+
+一、先运行诊断，不需要启动 Translay
+
+1. 将本文件旁边的 diagnose-macos.sh 拷贝到桌面。
+2. 打开 macOS 自带的“终端”，粘贴并运行以下一行：
+
+/bin/bash "$HOME/Desktop/diagnose-macos.sh" > "$HOME/Desktop/Translay-Mac-diagnostic.txt" 2>&1
+
+3. 等待命令结束，打开桌面的 Translay-Mac-diagnostic.txt。
+4. 检查报告中是否包含你不希望分享的用户名或路径，再提供报告用于排查。
+
+脚本默认检查 /Applications/Translay Mac Preview.app，也支持传入其他位置：
+
+/bin/bash "$HOME/Desktop/diagnose-macos.sh" "/实际位置/Translay Mac Preview.app" > "$HOME/Desktop/Translay-Mac-diagnostic.txt" 2>&1
+
+若 App 已被系统移除，不需要从废纸篓恢复或重新尝试打开。
+脚本会注明找不到 App，并继续记录系统版本与近 30 分钟涉及 Translay 的安全日志。
+时间较久、权限受限或系统隐藏相关信息时，日志可能为空；这不代表没有拦截。
+
+脚本只检查文件元数据、签名及系统策略，不运行 App、不重新签名、不移除隔离标记、
+不修改系统安全设置，也不读取 Translay 配置、API 密钥或钥匙串。
+策略检查由系统工具完成，可能进行系统正常的在线验证；脚本不会上传诊断报告。
+
+二、包内文件
+
+SHA256SUMS.txt：诊断脚本的 SHA-256（不适用于 GitHub 下载的外层 ZIP）。
+package-verification.txt：CPU、签名完整性及 ZIP 解压一致性检查结果。
+ci-policy-diagnostic.txt：CI 机器上的系统策略检查结果，不代表你的 Mac 的检查结果。
+control-policy-diagnostic.txt：同机最小 C 对照程序的策略结果；相同错误不表示原型已安全或获放行。
+diagnose-macos.sh：上述诊断脚本。
+
+Apple M 系列芯片使用 aarch64-apple-darwin；Intel 使用 x86_64-apple-darwin。
+Apple 芯片构建选择 macOS 27 的 Xcode 27 环境；具体版本以报告为准。
+CI 没有验证浏览器下载后的隔离状态，也没有模拟用户双击首次启动。
+系统策略评估未放行时，CI 只上传诊断附件，不提供 App 供再次试装。
+以后仅在策略评估通过时才会出现独立的 Translay-Mac-Preview-<架构> 应用附件。
+
+三、后续正式分发
+
+需要先查明启动拦截原因，再接入 Developer ID Application 签名、Apple 公证、
+公证票据装订及分发前策略检查。重新签名不能替代对有害内容警告的调查。
+出现“无法验证开发者”和“将损坏电脑”时不能用同一种处理方式。
+
+Apple 官方说明：https://support.apple.com/zh-cn/102445
+源码仓库：https://github.com/malusry/Translay

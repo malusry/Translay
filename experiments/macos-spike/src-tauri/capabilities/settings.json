@@ -1,0 +1,6 @@
+{
+  "identifier": "spike-settings",
+  "description": "Local Mac prototype settings events only.",
+  "windows": ["settings"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

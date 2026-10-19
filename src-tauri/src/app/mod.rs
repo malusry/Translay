@@ -196,7 +196,7 @@ pub fn run() {
                 .map_err(|error| io::Error::other(format!("创建划词翻译按钮失败：{error}")))?;
             create_tray_feedback_window(app.handle())
                 .map_err(|error| io::Error::other(format!("创建托盘风格切换提示失败：{error}")))?;
-            let config_store = ModelConfigStore::load(app.handle())
+            let config_store = crate::model_config::load(app.handle())
                 .map_err(|error| io::Error::other(format!("加载模型配置失败：{error}")))?;
             let credential_store = CredentialStore;
             if let Err(error) =

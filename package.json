@@ -20,11 +20,17 @@
     "typecheck": "tsc --noEmit",
     "check:frontend": "npm run typecheck && npm run test && npm run build",
     "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && cargo check --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml",
-    "check": "npm run check:frontend && npm run check:rust",
+    "check:core": "cargo fmt --manifest-path crates/translay-core/Cargo.toml --all -- --check && cargo test --manifest-path crates/translay-core/Cargo.toml --locked",
+    "check": "npm run check:frontend && npm run check:core && npm run check:rust",
     "app:dev": "tauri dev",
     "acceptance": "node tools/acceptance.cjs",
     "app:build": "tauri build --bundles nsis",
     "app:build:exe": "tauri build --no-bundle",
+    "macos:preview": "npm --prefix experiments/macos-spike run dev",
+    "macos:build:frontend": "npm --prefix experiments/macos-spike run build",
+    "macos:check": "npm run macos:build:frontend && cargo fmt --manifest-path experiments/macos-spike/src-tauri/Cargo.toml --all -- --check && cargo test --manifest-path experiments/macos-spike/src-tauri/Cargo.toml --no-default-features --locked",
+    "macos:dev": "node experiments/macos-spike/tools/tauri.mjs dev",
+    "macos:build": "node experiments/macos-spike/tools/tauri.mjs build",
     "tauri": "tauri"
   },
   "dependencies": {

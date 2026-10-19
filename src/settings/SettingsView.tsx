@@ -1,4 +1,11 @@
-import { useLayoutEffect, useRef, type FormEvent, type MouseEvent } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  type FormEvent,
+  type FocusEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 
 import type {
   ModelBackend,
@@ -23,7 +30,13 @@ export type SettingsStatus = {
   message: string;
 };
 
-interface SettingsViewProps {
+export interface SettingsViewProps {
+  windowChrome?: "custom" | "native";
+  // Source tabs can still browse both forms; configuration mutations are disabled.
+  readOnly?: boolean;
+  notice?: ReactNode;
+  translationExtras?: ReactNode;
+  modelSourceDescription?: string;
   section: SettingsSection;
   config: ModelConfigView;
   activeHealth: ConnectionHealth;
@@ -58,7 +71,7 @@ interface SettingsViewProps {
   onRefreshApiKeyStatus: (baseUrl: string) => void;
   onBeginApiKeyEdit: () => void;
   onSetApiKey: (apiKey: string) => void;
-  onFinishApiKeyEdit: () => void;
+  onFinishApiKeyEdit: (event: FocusEvent<HTMLInputElement>) => void;
   onSetTimeoutSeconds: (seconds: number) => void;
   onTestConnection: () => void;
   onClearApiKey: () => void;
@@ -227,6 +240,11 @@ function ModeChoice({
 }
 
 export function SettingsView({
+  windowChrome = "custom",
+  readOnly = false,
+  notice,
+  translationExtras,
+  modelSourceDescription = "选择后立即切换当前模型来源",
   section,
   config,
   activeHealth,
@@ -263,20 +281,21 @@ export function SettingsView({
   onClearApiKey,
 }: SettingsViewProps) {
   const endpoint = config[config.backend];
+  const customChrome = windowChrome === "custom";
 
   return (
     <main className="settings-shell">
       <aside
         className="settings-sidebar"
-        data-tauri-drag-region
-        onMouseDown={onWindowMouseDown}
+        data-tauri-drag-region={customChrome || undefined}
+        onMouseDown={customChrome ? onWindowMouseDown : undefined}
       >
-        <div className="sidebar-brand" data-tauri-drag-region>
+        <div className="sidebar-brand" data-tauri-drag-region={customChrome || undefined}>
           <img
             className="brand-wordmark"
             src={translayWordmark}
             alt="Translay"
-            data-tauri-drag-region
+            data-tauri-drag-region={customChrome || undefined}
           />
         </div>
         <nav className="settings-nav" aria-label="设置分类">
@@ -302,51 +321,54 @@ export function SettingsView({
       <section className="settings-content">
         <header
           className="settings-header"
-          data-tauri-drag-region
-          onMouseDown={onWindowMouseDown}
+          data-tauri-drag-region={customChrome || undefined}
+          onMouseDown={customChrome ? onWindowMouseDown : undefined}
         >
-          <div className="settings-title" data-tauri-drag-region>
+          <div className="settings-title" data-tauri-drag-region={customChrome || undefined}>
             <h1
               className={`settings-heading ${section}`}
-              data-tauri-drag-region
+              data-tauri-drag-region={customChrome || undefined}
             >
               {section === "translation" ? "翻译" : "模型"}
             </h1>
             {section === "translation" ? (
-              <p data-tauri-drag-region>选择使用场景与模型思考方式</p>
+              <p data-tauri-drag-region={customChrome || undefined}>选择使用场景与模型思考方式</p>
             ) : (
               <p
                 className={`active-model-status ${activeHealth}`}
-                data-tauri-drag-region
+                data-tauri-drag-region={customChrome || undefined}
                 aria-label={`当前使用 ${activeSummary}`}
               >
                 <span className="connection-dot" aria-hidden="true" />
-                <span data-tauri-drag-region>{activeSummary}</span>
+                <span data-tauri-drag-region={customChrome || undefined}>{activeSummary}</span>
               </p>
             )}
           </div>
-          <div className="window-controls">
-            <button
-              className="icon-button"
-              type="button"
-              onClick={onMinimize}
-              aria-label="最小化"
-              title="最小化"
-            >
-              <span className="minimize-mark" aria-hidden="true" />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={onClose}
-              aria-label="关闭"
-              title="关闭"
-            >
-              <span className="close-mark" aria-hidden="true" />
-            </button>
-          </div>
+          {customChrome && (
+            <div className="window-controls">
+              <button
+                className="icon-button"
+                type="button"
+                onClick={onMinimize}
+                aria-label="最小化"
+                title="最小化"
+              >
+                <span className="minimize-mark" aria-hidden="true" />
+              </button>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={onClose}
+                aria-label="关闭"
+                title="关闭"
+              >
+                <span className="close-mark" aria-hidden="true" />
+              </button>
+            </div>
+          )}
         </header>
 
+        {notice}
         <form className="settings-form" onSubmit={onSubmit}>
           <div className="settings-body">
             {section === "translation" ? (
@@ -368,7 +390,7 @@ export function SettingsView({
                     label="日常"
                     description="网页、消息与常用词句的快速翻译"
                     active={config.mode === "conversational"}
-                    disabled={!loaded || translationSaving}
+                    disabled={readOnly || !loaded || translationSaving}
                     onSelect={onSelectMode}
                   />
                   <ModeChoice
@@ -376,7 +398,7 @@ export function SettingsView({
                     label="学习"
                     description="结合上下文理解论文、教材与专业内容"
                     active={config.mode === "academic"}
-                    disabled={!loaded || translationSaving}
+                    disabled={readOnly || !loaded || translationSaving}
                     onSelect={onSelectMode}
                   />
                 </div>
@@ -394,7 +416,7 @@ export function SettingsView({
                     role="switch"
                     aria-checked={config.reasoningEnabled}
                     aria-label="翻译思考"
-                    disabled={!loaded || translationSaving}
+                    disabled={readOnly || !loaded || translationSaving}
                     onClick={onToggleReasoning}
                   >
                     <span />
@@ -406,7 +428,7 @@ export function SettingsView({
                 <div className="model-toolbar">
                   <div>
                     <h2 id="model-source-label">模型来源</h2>
-                    <p>选择后立即切换当前模型来源</p>
+                    <p>{modelSourceDescription}</p>
                   </div>
                   <div
                     className={`source-tabs ${config.backend} ${
@@ -491,12 +513,13 @@ export function SettingsView({
                               key={preset.id}
                               className={`provider-preset provider-${preset.id}`}
                               type="button"
+                              disabled={readOnly}
                               onClick={() =>
                                 onSelectProviderPreset(preset.id)
                               }
                               onContextMenu={(event) => {
                                 event.preventDefault();
-                                onOpenProviderPortal(preset.id);
+                                if (!readOnly) onOpenProviderPortal(preset.id);
                               }}
                               aria-label={`${preset.label}：左键应用预设，右键打开${portalName}`}
                               title={`左键应用 ${preset.label} 预设 · 右键打开${portalName}`}
@@ -513,6 +536,7 @@ export function SettingsView({
                     <label htmlFor="base-url">服务地址</label>
                     <input
                       id="base-url"
+                      disabled={readOnly}
                       value={endpoint.baseUrl}
                       onChange={(event) =>
                         onSetEndpoint(
@@ -535,6 +559,7 @@ export function SettingsView({
                     <label htmlFor="model-name">模型名称</label>
                     <input
                       id="model-name"
+                      disabled={readOnly}
                       value={endpoint.model}
                       onChange={(event) =>
                         onSetEndpoint(
@@ -559,6 +584,7 @@ export function SettingsView({
                         <button
                           className="credential-slot"
                           type="button"
+                          disabled={readOnly}
                           aria-label={`${
                             config.apiKeyHint ?? `已保存 ${apiKeyLabel}`
                           }，点击修改`}
@@ -574,6 +600,7 @@ export function SettingsView({
                       ) : (
                         <input
                           id="api-key"
+                          disabled={readOnly}
                           type="password"
                           value={apiKey}
                           autoFocus={editingApiKey}
@@ -596,6 +623,7 @@ export function SettingsView({
                     <div className="number-control">
                       <input
                         id="timeout-seconds"
+                        disabled={readOnly}
                         type="number"
                         min={5}
                         max={180}
@@ -627,6 +655,7 @@ export function SettingsView({
                     aria-busy={connectionStatus.kind === "working"}
                     aria-describedby={connectionStatus.message ? "connection-feedback" : undefined}
                     disabled={
+                      readOnly ||
                       !loaded ||
                       connectionStatus.kind === "working" ||
                       modelSaving ||
@@ -664,6 +693,7 @@ export function SettingsView({
                     type="submit"
                     aria-busy={modelSaving}
                     disabled={
+                      readOnly ||
                       !loaded ||
                       !providerDirty ||
                       modelSaving ||
@@ -689,6 +719,7 @@ export function SettingsView({
                 </div>
               </div>
             )}
+            {section === "translation" && translationExtras}
           </div>
 
           {(status.kind !== "idle" ||
@@ -703,7 +734,8 @@ export function SettingsView({
                   config.backend === "api" &&
                   config.hasApiKey &&
                   editingApiKey && (
-                    <button type="button" onClick={onClearApiKey}>
+                    <button type="button" data-api-key-action disabled={readOnly}
+                      onMouseDown={(event) => event.preventDefault()} onClick={onClearApiKey}>
                       移除 {apiKeyLabel}
                     </button>
                   )}
